@@ -1,0 +1,129 @@
+CSE 4095 — Agentic Programming
+Team Project Proposal: Full-Stack Web Application
+
+Overview
+
+In this assignment, your team will propose a web application that you will design, implement, and demonstrate as your final team project.
+
+Your application must include three major components:
+
+1. Front-end: A user interface that allows users to interact with the application through a web browser.
+2. Back-end: A server-side component that processes requests, implements application logic, and communicates with the database.
+3. Database: A persistent data storage system that allows information to be saved, retrieved, and updated.
+
+You are encouraged to use generative AI tools and AI coding agents throughout the project, including brainstorming, planning, implementation, debugging, and testing.
+
+The goal of this proposal is to establish a clear, realistic plan for your project before development begins.
+
+Proposal Requirements
+
+Submit a proposal of approximately 2–3 pages covering the following sections.
+
+1. Project Title and Team Members
+
+Provide a descriptive title for your application and list all team members.
+
+2. Project Description and Motivation
+
+Explain what your application will do and why it would be useful.
+
+Address the following questions:
+- What problem does your application solve?
+- Who are the intended users?
+- Why would someone want to use your application?
+
+3. Main Features
+
+Describe the major features you plan to implement.
+
+Identify at least three core features that your team commits to implementing.
+
+For each feature, briefly explain what the user can do and what the application will do in response.
+
+Distinguish between:
+- Core features: Essential functionality required for the application to be considered complete.
+- Optional features: Additional functionality that may be implemented if time permits.
+
+Your core features should form a realistic Minimum Viable Product (MVP).
+
+4. Application Architecture
+
+Explain how your application will use the following three components.
+
+Front-end
+
+Describe the main pages or screens users will interact with. Explain what users can enter, view, or modify through the interface.
+
+Back-end
+
+Describe the main responsibilities of the server, such as processing user requests, validating input, implementing application logic, and communicating with the database.
+
+Database
+
+Explain what information your application needs to store permanently.
+
+Identify at least two types of data your database will manage. For example, a study planner might store users and tasks, while a recipe application might store recipes and ingredients.
+
+Also describe how users will create, retrieve, update, or delete stored information.
+
+You do not need to provide actual code or a detailed database schema at this stage.
+
+5. Technology and AI Tools
+
+Briefly identify the technologies your team expects to use.
+
+Examples include:
+- Front-end: HTML/CSS/JavaScript, React, or another web framework.
+- Back-end: Python with Flask or FastAPI, Node.js, or another server framework.
+- Database: SQLite, PostgreSQL, or another database system.
+- AI development tools: ChatGPT, Codex, Cursor, or similar tools.
+
+You may revise your technology choices during development.
+
+6. Development Plan and Team Responsibilities
+
+Explain how your team plans to organize the work.
+
+Include:
+- The major development tasks.
+- Initial responsibilities for each team member.
+- How team members will collaborate and integrate their work.
+- A rough sequence of development milestones.
+
+All team members are expected to contribute meaningfully to the project. Responsibilities may evolve as development progresses.
+
+7. Challenges and Feasibility
+
+Identify at least two potential challenges your team may encounter and explain how you plan to address them.
+
+Examples include database integration, authentication, deployment, or coordinating work among team members.
+
+Your proposed project should be achievable within the remaining time in the semester.
+
+Submission Instructions
+
+- Submit one proposal per team.
+- Format: PDF or Word document.
+- Length: Approximately 2–3 pages.
+- Include the project title and all team members' names.
+- Organize your proposal using the sections listed above.
+- Only one team member needs to submit the proposal.
+
+Evaluation Criteria
+
+Clear project description and motivation: 20%
+Well-defined features and realistic MVP: 25%
+Front-end, back-end, and database design: 30%
+Development plan and team responsibilities: 15%
+Feasibility and potential challenges: 10%
+Total: 100%
+
+Important Notes
+
+Your proposed application must meaningfully use all three components: front-end, back-end, and database. A static website or an application that stores everything only in the browser does not satisfy the project requirements.
+
+You are encouraged to use AI to develop and refine your proposal. However, your team is responsible for understanding the proposed application, making design decisions, and ensuring that the project is feasible.
+
+The proposal is a starting point, not a permanent contract. You may refine your features or technology choices during development, but major changes to the project's scope should be discussed with the instructor.
+
+The objective is to propose an application that your team can realistically build, test, and demonstrate by the end of the semester.
