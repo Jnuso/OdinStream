@@ -1,0 +1,21 @@
+.app-shell {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 80px 24px;
+}
+
+.eyebrow {
+  color: #d5eaa2;
+  font-size: 11px;
+  letter-spacing: 2px;
+}
+
+h1 {
+  font-size: clamp(32px, 7vw, 64px);
+  font-weight: 500;
+  margin: 16px 0;
+}
+
+.app-shell p {
+  color: #a6b19c;
+}
