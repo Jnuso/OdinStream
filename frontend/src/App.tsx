@@ -14,6 +14,7 @@ import { readState, storageKey } from "./data/storage";
 import Modal from "./components/Modal";
 import Poster from "./components/Poster";
 import PostComposer from "./components/PostComposer";
+import { useNavigation } from "./data/navigation";
 import "./App.css";
 
 function Avatar({ user, large = false }: { user: User; large?: boolean }) {
@@ -25,9 +26,11 @@ function Avatar({ user, large = false }: { user: User; large?: boolean }) {
 }
 export default function App() {
   const [state, setState] = useState(readState);
-  const [page, setPage] = useState<"feed" | "profile">("feed");
-  const [feed, setFeed] = useState<"following" | "public">("following");
-  const [profileId, setProfileId] = useState(currentUserId);
+  const { page, feed, profileId, navigate } = useNavigation();
+  const setPage = (page: "feed" | "profile") =>
+    navigate({ page, feed, profileId });
+  const setFeed = (feed: "following" | "public") =>
+    navigate({ page, feed, profileId });
   const [composer, setComposer] = useState<Post | "new" | null>(null);
   const [selectedTitle, setSelectedTitle] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<Post | null>(null);
@@ -60,8 +63,7 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [notice]);
   function openProfile(id: string) {
-    setProfileId(id);
-    setPage("profile");
+    navigate({ page: "profile", feed, profileId: id });
   }
   function toggleFollow(id: string) {
     if (id === currentUserId) return;
@@ -82,8 +84,7 @@ export default function App() {
         createdAt: new Date().toISOString(),
       };
       updateState((value) => ({ ...value, posts: [post, ...value.posts] }));
-      setPage("feed");
-      setFeed("public");
+      navigate({ page: "feed", feed: "public", profileId });
       setNotice("Your post is live in the local demo");
     } else {
       updateState((value) => ({
@@ -100,7 +101,14 @@ export default function App() {
   }
   return (
     <>
-      <a className="skip-link" href="#main">
+      <a
+        className="skip-link"
+        href="#main"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById("main")?.focus();
+        }}
+      >
         Skip to content
       </a>
       <aside className="sidebar">
@@ -113,11 +121,20 @@ export default function App() {
           }}
         >
           <span className="brand-mark" aria-hidden="true">
-            ↗
+            <svg viewBox="0 0 24 24" width="22" height="22" focusable="false">
+              <path
+                d="M6 18 18 6M6 6h12v12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </span>
           Odin<span>Stream</span>
         </a>
-        <div className="nav-label">YOUR WATCHING WORLD</div>
+        <div className="nav-label">Navigation</div>
         <nav aria-label="Main navigation">
           <button
             className={`nav-item ${page === "feed" ? "active" : ""}`}
@@ -137,15 +154,6 @@ export default function App() {
         <button className="primary new-post" onClick={() => setComposer("new")}>
           <span>+</span> New post
         </button>
-        <div className="sidebar-note">
-          <span>✦</span>
-          <h3>
-            Good stories.
-            <br />
-            Better together.
-          </h3>
-          <p>All your screens in one place.</p>
-        </div>
         <button
           className="demo-account"
           onClick={() => openProfile(currentUserId)}
@@ -160,29 +168,23 @@ export default function App() {
       </aside>
       <div className="workspace">
         <header className="topbar">
-          <span>A GOOD WATCH IS BETTER SHARED</span>
+          <span>Social prototype</span>
           <div>
             <span className="demo-badge">● MOCK DATA</span>
             <span className="country">{state.country}</span>
             <Avatar user={me} />
           </div>
         </header>
-        <main id="main">
+        <main id="main" tabIndex={-1}>
           {page === "feed" ? (
             <div className="page-heading">
               <div>
-                <span className="eyebrow">YOUR PEOPLE. YOUR PERSPECTIVE.</span>
-                <h1>Find your kind of movie night.</h1>
-                <p>Fresh takes, familiar faces, and stories worth sharing.</p>
+                <h1>Feed</h1>
+                <p>Movie and show ratings and reviews.</p>
               </div>
-              <span className="edition">THE SOCIAL EDIT / 01</span>
             </div>
           ) : (
             <>
-              <div className={`profile-banner ${profile.color}`}>
-                <span>EVERY WATCH TELLS A STORY</span>
-                <i aria-hidden="true">✦</i>
-              </div>
               <section
                 className="profile-header"
                 aria-label={`${profile.name} profile`}
@@ -240,7 +242,7 @@ export default function App() {
                   <section className="share-prompt">
                     <Avatar user={me} />
                     <button onClick={() => setComposer("new")}>
-                      Seen something worth talking about?
+                      Write a review…
                     </button>
                     <button
                       className="prompt-plus"
@@ -265,7 +267,6 @@ export default function App() {
                     >
                       Public
                     </button>
-                    <span className="feed-caption">THE LATEST TAKES</span>
                   </div>
                 </>
               ) : (
@@ -274,7 +275,6 @@ export default function App() {
                     {ownProfile ? "Your" : `${profile.name.split(" ")[0]}’s`}{" "}
                     ratings & reviews
                   </h2>
-                  <span>THE WATCH DIARY</span>
                 </div>
               )}
               <div className="post-list">
@@ -336,7 +336,7 @@ export default function App() {
                             <p className="review-text">{post.review}</p>
                           ) : (
                             <p className="muted review-text">
-                              A rating says it all.
+                              No written review.
                             </p>
                           )}
                         </div>
@@ -364,11 +364,10 @@ export default function App() {
               </div>
               {!posts.length && (
                 <section className="empty">
-                  <span>✦</span>
                   <h2>
                     {page === "profile"
-                      ? "The first take is yours."
-                      : "Your people are out there."}
+                      ? "No posts yet."
+                      : "No posts from followed accounts."}
                   </h2>
                   <p>
                     {page === "profile"
@@ -401,8 +400,7 @@ export default function App() {
             >
               {page === "profile" && ownProfile && (
                 <section className="rail-card preferences">
-                  <span className="eyebrow">MAKE IT YOURS</span>
-                  <h2>Your watching world</h2>
+                  <h2>Preferences</h2>
                   <label htmlFor="country">Country</label>
                   <select
                     id="country"
@@ -447,8 +445,7 @@ export default function App() {
                 </section>
               )}
               <section className="rail-card">
-                <span className="eyebrow">MORE GOOD COMPANY</span>
-                <h2>People to watch with</h2>
+                <h2>Suggested accounts</h2>
                 {users
                   .filter((user) => user.id !== currentUserId)
                   .map((user) => (
@@ -474,26 +471,7 @@ export default function App() {
                       </button>
                     </div>
                   ))}
-                <p className="rail-footnote">
-                  A few fictional faces for the prototype.
-                </p>
-              </section>
-              <section className="quote-card">
-                <span>✦</span>
-                <h2>
-                  The best part of
-                  <br />a great watch?
-                  <br />
-                  <em>Talking about it.</em>
-                </h2>
-                <p>
-                  Leave a rating. Start a conversation.
-                  <br />
-                  Find your next favorite.
-                </p>
-                <button onClick={() => setComposer("new")}>
-                  Share your take <span>↗</span>
-                </button>
+                <p className="rail-footnote">Sample accounts.</p>
               </section>
               <p className="prototype-note">
                 LOCAL FRONTEND PROTOTYPE
@@ -504,7 +482,7 @@ export default function App() {
           </div>
           <footer>
             <span>
-              <strong>OdinStream</strong> · All your screens in one place.
+              <strong>OdinStream</strong>
             </span>
             <span>
               {persisted

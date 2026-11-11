@@ -35,7 +35,7 @@ export const users: User[] = [
     id: "raif",
     name: "Raif Rashid",
     handle: "raif.watches",
-    bio: "One more episode. Then one more movie.",
+    bio: "Movie and television reviews.",
     initials: "RR",
     color: "olive",
   },
