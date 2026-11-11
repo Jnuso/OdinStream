@@ -30,9 +30,17 @@ The build runs TypeScript checking and writes production assets to `dist/`. Both
 ## Structure
 
 - `src/main.tsx`: React entry point.
-- `src/App.tsx`: application shell.
+- `src/App.tsx`: feed and profile views with local demo state.
+- `src/components/`: post composer, title artwork, and accessible dialogs.
+- `src/data/`: typed mock fixtures and local storage validation.
 - `src/index.css`: global styles and focus treatment.
 - `src/App.css`: application styles.
 - `public/`: static assets.
 
-The backend and database are separate work; this scaffold does not connect to them.
+## Social prototype
+
+The frontend includes Following/Public feeds, public profiles, follow/unfollow controls, and a post composer with title search, 1–5 star ratings, and optional reviews. Users can edit or delete their own demo posts. My Profile also saves country and streaming-service preferences.
+
+All users, reviews, and catalog entries are fixtures. Demo state persists in localStorage under `odinstream-social-demo-v1`; **Reset demo** restores the fixtures. When storage is unavailable, the app works for the session and reports that in the footer. Original CSS poster concepts require no external image service.
+
+This prototype has no backend, real authentication, database connection, live TMDB requests, or recommendation algorithm. Ownership checks in the UI demonstrate the intended experience; actual authentication and authorization must be enforced by FastAPI when integrated. Discover and My Library are separate feature work.
