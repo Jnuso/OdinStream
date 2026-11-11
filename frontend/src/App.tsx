@@ -342,7 +342,6 @@ export default function App() {
                         </div>
                       </div>
                       <div className="post-footer">
-                        <span>Logged on OdinStream</span>
                         {post.userId === currentUserId ? (
                           <div>
                             <button onClick={() => setComposer(post)}>
