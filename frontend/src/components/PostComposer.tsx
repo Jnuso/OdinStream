@@ -31,9 +31,10 @@ export default function PostComposer({
   }
   return (
     <Modal label={post ? "Edit post" : "New post"} onClose={onClose}>
-      <span className="eyebrow">YOUR TAKE BELONGS HERE</span>
-      <h2>{post ? "A second take." : "What stayed with you?"}</h2>
-      <p className="muted">A great story deserves a conversation.</p>
+      <h2>{post ? "Edit post" : "New post"}</h2>
+      <p className="muted">
+        Select a title, add a rating, and optionally write a review.
+      </p>
       <form onSubmit={submit} className="composer">
         <label htmlFor="title-search">Pick a movie or show</label>
         <input
@@ -110,7 +111,7 @@ export default function PostComposer({
           id="review"
           maxLength={1000}
           rows={4}
-          placeholder="The scene, the feeling, the reason you’d recommend it…"
+          placeholder="Write your review…"
           value={review}
           onChange={(event) => setReview(event.target.value)}
         />

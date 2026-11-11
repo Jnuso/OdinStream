@@ -2,7 +2,7 @@
 .sidebar {
   position: fixed;
   inset: 0 auto 0 0;
-  width: 220px;
+  width: 240px;
   padding: 32px 20px;
   display: flex;
   flex-direction: column;
@@ -35,7 +35,7 @@
 .nav-label {
   margin: 53px 12px 19px;
   color: #939e88;
-  font-size: 8px;
+  font-size: 14px;
   letter-spacing: 1.8px;
 }
 nav {
@@ -51,7 +51,7 @@ nav {
   text-align: left;
   border-radius: 6px;
   color: #a6b09c;
-  font-size: 12px;
+  font-size: 14px;
 }
 .nav-item > span {
   font-size: 21px;
@@ -73,7 +73,7 @@ nav {
   background: #d5eaa2;
   color: #24301b;
   border-radius: 5px;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
 }
 .primary:hover {
@@ -84,7 +84,7 @@ nav {
   color: #d5eaa2;
   border-radius: 5px;
   padding: 11px 18px;
-  font-size: 12px;
+  font-size: 14px;
 }
 .new-post {
   margin-top: 27px;
@@ -92,24 +92,6 @@ nav {
 .new-post > span {
   font-size: 20px;
   font-weight: 400;
-}
-.sidebar-note {
-  margin-top: auto;
-  padding: 30px 12px 42px;
-}
-.sidebar-note > span {
-  color: #d5eaa2;
-  font-size: 29px;
-}
-.sidebar-note h3 {
-  font-size: 20px;
-  font-weight: 400;
-  line-height: 1.5;
-  margin: 15px 0 10px;
-}
-.sidebar-note p {
-  font-size: 10px;
-  color: #a5af99;
 }
 .demo-account {
   display: flex;
@@ -121,11 +103,11 @@ nav {
 }
 .demo-account strong {
   display: block;
-  font-size: 11px;
+  font-size: 14px;
 }
 .demo-account small {
   display: block;
-  font-size: 10px;
+  font-size: 14px;
   color: #a5af99;
   margin-top: 4px;
 }
@@ -143,7 +125,7 @@ nav {
   display: inline-grid;
   place-items: center;
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 500;
   border: 1px solid #ffffff12;
 }
@@ -164,7 +146,7 @@ nav {
   color: #f5e2b8;
 }
 .workspace {
-  margin-left: 220px;
+  margin-left: 240px;
 }
 .topbar {
   height: 78px;
@@ -175,7 +157,7 @@ nav {
   border-bottom: 1px solid #ffffff0c;
 }
 .topbar > span {
-  font-size: 9px;
+  font-size: 14px;
   letter-spacing: 1.6px;
   color: #9ca78f;
 }
@@ -187,19 +169,19 @@ nav {
 .topbar .avatar {
   width: 29px;
   height: 29px;
-  font-size: 9px;
+  font-size: 14px;
 }
 .demo-badge {
   padding: 5px 8px;
   border: 1px solid #c6d7a333;
   border-radius: 4px;
   color: #cadba8;
-  font-size: 8px;
+  font-size: 14px;
   letter-spacing: 1px;
 }
 .country {
   color: #a5af99;
-  font-size: 10px;
+  font-size: 14px;
 }
 main {
   padding: 37px 40px 0;
@@ -214,7 +196,7 @@ main {
 }
 .eyebrow {
   color: #b0bf98;
-  font-size: 9px;
+  font-size: 14px;
   letter-spacing: 1.7px;
 }
 h1 {
@@ -226,17 +208,12 @@ h1 {
 .page-heading p,
 .profile-header p {
   color: #a5b098;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.8;
-}
-.edition {
-  font-size: 8px;
-  color: #a1af8c;
-  letter-spacing: 1.5px;
 }
 .social-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 290px;
+  grid-template-columns: minmax(0, 1fr) 340px;
   gap: 26px;
   align-items: start;
 }
@@ -247,7 +224,7 @@ h1 {
   color: #a5b098;
 }
 .small {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.7;
 }
 /* Feed */
@@ -264,7 +241,7 @@ h1 {
   flex: 1;
   text-align: left;
   color: #aebb9f;
-  font-size: 12px;
+  font-size: 14px;
   padding: 10px 0;
 }
 .prompt-plus {
@@ -283,7 +260,7 @@ h1 {
   margin: 12px 0 22px;
 }
 .feed-tabs button {
-  font-size: 12px;
+  font-size: 14px;
   padding: 17px 0;
   border-bottom: 2px solid transparent;
   color: #a6b29a;
@@ -293,15 +270,9 @@ h1 {
   border-color: #d5eaa2;
 }
 .feed-tabs button span {
-  font-size: 9px;
+  font-size: 14px;
   margin-left: 6px;
   color: #a3b28c;
-}
-.feed-caption {
-  margin-left: auto;
-  color: #a2af90;
-  letter-spacing: 1.7px;
-  font-size: 7px;
 }
 .post-list {
   display: grid;
@@ -329,12 +300,12 @@ h1 {
 }
 .author-link strong {
   display: block;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
 }
 .author-link small {
   display: block;
-  font-size: 9px;
+  font-size: 14px;
   margin-top: 4px;
   color: #a1ae8f;
 }
@@ -342,7 +313,7 @@ h1 {
   color: #d5eaa2;
 }
 time {
-  font-size: 9px;
+  font-size: 14px;
   color: #a3b092;
 }
 .post-content {
@@ -396,14 +367,14 @@ time {
 .poster small {
   position: absolute;
   top: 14px;
-  font-size: 5px;
+  font-size: 14px;
   letter-spacing: 1.5px;
   color: #ffffffc9;
 }
 .poster > span:last-child {
   position: absolute;
   bottom: 13px;
-  font-size: 5px;
+  font-size: 14px;
   letter-spacing: 1px;
   color: #ffffffc9;
 }
@@ -476,7 +447,7 @@ time {
   padding-top: 6px;
 }
 .post-review > .eyebrow {
-  font-size: 8px;
+  font-size: 14px;
 }
 .title-link {
   display: block;
@@ -506,7 +477,7 @@ time {
 }
 .review-text {
   color: #c0c8b6;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.95;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -518,11 +489,11 @@ time {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 9px;
+  font-size: 14px;
   color: #a4b18f;
 }
 .post-footer button {
-  font-size: 10px;
+  font-size: 14px;
   color: #c0cfa6;
   padding: 4px 0;
 }
@@ -554,7 +525,7 @@ time {
   margin: 10px 0 24px;
 }
 .rail-card .eyebrow {
-  font-size: 8px;
+  font-size: 14px;
 }
 .suggested-user {
   display: flex;
@@ -566,23 +537,23 @@ time {
 .suggested-user .avatar {
   width: 31px;
   height: 31px;
-  font-size: 9px;
+  font-size: 14px;
 }
 .suggested-user .author-link {
   gap: 8px;
 }
 .suggested-user .author-link strong {
-  font-size: 10px;
+  font-size: 14px;
 }
 .suggested-user .author-link small {
-  font-size: 8px;
+  font-size: 14px;
 }
 .follow-button {
   color: #d5eaa2;
   background: #d5eaa211;
   border-radius: 4px;
   padding: 6px 8px;
-  font-size: 9px;
+  font-size: 14px;
   white-space: nowrap;
 }
 .follow-button.is-following {
@@ -591,83 +562,17 @@ time {
   border: 1px solid #ffffff15;
 }
 .rail-footnote {
-  font-size: 9px;
+  font-size: 14px;
   color: #9eac8b;
   border-top: 1px solid #ffffff0b;
   padding-top: 18px;
   line-height: 1.8;
 }
-.quote-card {
-  padding: 28px 24px;
-  border-radius: 8px;
-  border: 1px solid #d5eaa21a;
-  background: radial-gradient(
-    ellipse at top right,
-    #454e33,
-    #252d21 60%,
-    #1c231b
-  );
-}
-.quote-card > span {
-  color: #d5eaa2;
-  font-size: 32px;
-}
-.quote-card h2 {
-  font-size: 26px;
-  line-height: 1.4;
-  font-weight: 400;
-  letter-spacing: -0.6px;
-  margin: 20px 0 15px;
-}
-.quote-card em {
-  color: #d5eaa2;
-  font-family: Georgia, serif;
-  font-weight: 400;
-}
-.quote-card p {
-  font-size: 10px;
-  color: #b5c2a2;
-  line-height: 1.9;
-}
-.quote-card button {
-  display: flex;
-  justify-content: space-between;
-  width: 100%;
-  border-top: 1px solid #d5eaa221;
-  margin-top: 26px;
-  padding: 18px 0 0;
-  font-size: 11px;
-  color: #d5eaa2;
-}
 .prototype-note {
-  font-size: 8px;
+  font-size: 14px;
   line-height: 2.1;
   color: #a3b08e;
   padding: 0 8px;
-}
-.profile-banner {
-  height: 147px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 25px 40px;
-  background-image: repeating-linear-gradient(
-    130deg,
-    transparent 0 35px,
-    #ffffff05 35px 36px
-  );
-}
-.profile-banner > span {
-  font-size: 9px;
-  letter-spacing: 3px;
-  color: #e1eaccbd;
-}
-.profile-banner i {
-  font-size: 110px;
-  line-height: 1;
-  font-style: normal;
-  opacity: 0.65;
 }
 .profile-header {
   display: flex;
@@ -690,13 +595,13 @@ time {
 .profile-stats {
   display: flex;
   gap: 24px;
-  font-size: 10px;
+  font-size: 14px;
   color: #b4c19e;
   margin-top: 14px;
 }
 .profile-stats strong {
   color: #e8eddf;
-  font-size: 13px;
+  font-size: 14px;
   margin-right: 4px;
 }
 .section-heading {
@@ -712,14 +617,14 @@ time {
   font-weight: 400;
 }
 .section-heading > span {
-  font-size: 7px;
+  font-size: 14px;
   letter-spacing: 1.5px;
   color: #b0bf98;
 }
 .preferences label,
 .preferences legend {
   display: block;
-  font-size: 11px;
+  font-size: 14px;
   margin: 12px 0;
 }
 .preferences select {
@@ -739,7 +644,7 @@ time {
   accent-color: #d5eaa2;
 }
 .preferences .small {
-  font-size: 9px;
+  font-size: 14px;
 }
 /* Composer and dialogs */
 dialog {
@@ -772,7 +677,7 @@ dialog h2 {
   margin: 10px 0;
 }
 dialog > p {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.8;
 }
 .composer {
@@ -781,7 +686,7 @@ dialog > p {
   flex-direction: column;
 }
 .composer > label {
-  font-size: 12px;
+  font-size: 14px;
   margin-bottom: 10px;
 }
 .composer input,
@@ -793,7 +698,7 @@ dialog > p {
   border-radius: 5px;
   padding: 12px;
   font: inherit;
-  font-size: 12px;
+  font-size: 14px;
 }
 .composer input::placeholder,
 .composer textarea::placeholder {
@@ -826,13 +731,13 @@ dialog > p {
 }
 .title-choices strong {
   display: block;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
 }
 .title-choices small {
   display: block;
   color: #acb99a;
-  font-size: 10px;
+  font-size: 14px;
   margin-top: 3px;
 }
 .title-choices > button > span {
@@ -842,7 +747,7 @@ dialog > p {
   color: #d5eaa2;
 }
 .title-choices > p {
-  font-size: 12px;
+  font-size: 14px;
   padding: 15px 10px;
 }
 .selected-title {
@@ -859,18 +764,18 @@ dialog > p {
   flex-shrink: 0;
 }
 .selected-title .poster strong {
-  font-size: 9px;
+  font-size: 14px;
 }
 .selected-title .poster small,
 .selected-title .poster > span:last-child {
   display: none;
 }
 .selected-title strong {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
 }
 .selected-title p {
-  font-size: 10px;
+  font-size: 14px;
   color: #aaba96;
   margin-top: 6px;
 }
@@ -880,11 +785,11 @@ dialog > p {
   margin: 0 0 24px;
 }
 .rating-input legend {
-  font-size: 12px;
+  font-size: 14px;
 }
 .rating-input legend > span {
   color: #b1bf9e;
-  font-size: 10px;
+  font-size: 14px;
 }
 .rating-input button {
   padding: 3px 5px;
@@ -901,7 +806,7 @@ dialog > p {
   text-align: right;
   margin: 8px 0 18px;
   color: #a6b693;
-  font-size: 9px;
+  font-size: 14px;
 }
 .composer-footer {
   display: flex;
@@ -912,13 +817,13 @@ dialog > p {
   padding-top: 18px;
 }
 .composer-footer p {
-  font-size: 9px;
+  font-size: 14px;
   line-height: 1.8;
   color: #b3c39e;
 }
 .form-error {
   color: #ffc2ac;
-  font-size: 12px;
+  font-size: 14px;
   margin: 0 0 15px;
 }
 .title-detail {
@@ -929,7 +834,7 @@ dialog > p {
   padding: 12px 0;
 }
 .title-detail p {
-  font-size: 13px;
+  font-size: 14px;
   color: #bbc7ac;
   line-height: 1.8;
   margin: 16px 0;
@@ -958,7 +863,7 @@ dialog > p {
 }
 .empty p {
   color: #afbd9e;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.8;
   margin: 0 0 23px;
 }
@@ -970,7 +875,7 @@ footer {
   border-top: 1px solid #ffffff10;
   margin-top: 35px;
   padding: 20px 0;
-  font-size: 8px;
+  font-size: 14px;
   color: #a5b492;
 }
 footer strong {
@@ -979,7 +884,7 @@ footer strong {
 }
 footer button {
   color: #b4c69b;
-  font-size: 9px;
+  font-size: 14px;
 }
 .toast {
   position: fixed;
@@ -991,7 +896,7 @@ footer button {
   background: #e2edc6;
   color: #23321a;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 14px;
   opacity: 0;
   pointer-events: none;
   transition:
@@ -1040,11 +945,11 @@ footer button {
 }
 @media (max-width: 1180px) {
   .sidebar {
-    width: 190px;
+    width: 220px;
     padding: 28px 16px;
   }
   .workspace {
-    margin-left: 190px;
+    margin-left: 220px;
   }
   .brand {
     font-size: 19px;
@@ -1056,7 +961,7 @@ footer button {
     padding: 0 26px;
   }
   .social-layout {
-    grid-template-columns: minmax(0, 1fr) 235px;
+    grid-template-columns: minmax(0, 1fr) 290px;
     gap: 20px;
   }
   .rail-card {
@@ -1084,7 +989,7 @@ footer button {
     font-size: 18px;
   }
   .review-text {
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.8;
   }
   .title-link {
@@ -1092,9 +997,6 @@ footer button {
   }
   .post-card {
     padding: 17px;
-  }
-  .edition {
-    display: none;
   }
   .quote-card h2 {
     font-size: 23px;
@@ -1130,9 +1032,6 @@ footer button {
   .suggested-user .follow-button {
     margin-left: 0;
   }
-  .sidebar-note h3 {
-    font-size: 17px;
-  }
 }
 @media (max-width: 640px) {
   .sidebar {
@@ -1149,16 +1048,12 @@ footer button {
     font-size: 20px;
   }
   .nav-label,
-  .sidebar-note,
-  .demo-account {
-    display: none;
-  }
   nav {
     display: flex;
     gap: 6px;
   }
   .nav-item {
-    font-size: 11px;
+    font-size: 14px;
     padding: 9px;
     gap: 6px;
   }
@@ -1170,7 +1065,7 @@ footer button {
     width: 100%;
     min-height: 36px;
     padding: 6px;
-    font-size: 11px;
+    font-size: 14px;
   }
   .workspace {
     margin: 0;
@@ -1180,7 +1075,7 @@ footer button {
     padding: 0 20px;
   }
   .topbar > span {
-    font-size: 7px;
+    font-size: 14px;
     letter-spacing: 1px;
   }
   .topbar .country,
@@ -1195,10 +1090,10 @@ footer button {
     line-height: 1.25;
   }
   .eyebrow {
-    font-size: 8px;
+    font-size: 14px;
   }
   .page-heading p {
-    font-size: 11px;
+    font-size: 14px;
   }
   .page-heading {
     margin-bottom: 23px;
@@ -1237,12 +1132,12 @@ footer button {
     font-size: 15px;
   }
   .poster small {
-    font-size: 4px;
+    font-size: 14px;
     top: 10px;
     letter-spacing: 1px;
   }
   .poster > span:last-child {
-    font-size: 4px;
+    font-size: 14px;
     bottom: 9px;
   }
   .stars {
@@ -1251,7 +1146,7 @@ footer button {
     margin: 6px 0 9px;
   }
   .review-text {
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.8;
   }
   .share-prompt {
@@ -1259,35 +1154,24 @@ footer button {
     gap: 10px;
   }
   .share-prompt > button:not(.prompt-plus) {
-    font-size: 11px;
-  }
-  .feed-caption {
-    font-size: 6px;
-    letter-spacing: 1px;
+    font-size: 14px;
   }
   .suggested-user {
     flex-wrap: nowrap;
   }
   .suggested-user .author-link strong {
-    font-size: 12px;
+    font-size: 14px;
   }
   .suggested-user .author-link small {
-    font-size: 9px;
+    font-size: 14px;
   }
   .follow-button {
-    font-size: 10px;
+    font-size: 14px;
     padding: 7px 10px;
   }
-  .profile-banner {
-    height: 110px;
-    padding: 20px;
-  }
   .profile-banner > span {
-    font-size: 7px;
+    font-size: 14px;
     letter-spacing: 1.3px;
-  }
-  .profile-banner i {
-    font-size: 70px;
   }
   .profile-header {
     gap: 15px;
@@ -1298,7 +1182,7 @@ footer button {
     font-size: 24px;
   }
   .profile-header p {
-    font-size: 11px;
+    font-size: 14px;
   }
   .large-avatar {
     width: 58px;
@@ -1311,13 +1195,13 @@ footer button {
   }
   .profile-stats {
     gap: 15px;
-    font-size: 9px;
+    font-size: 14px;
   }
   .section-heading h2 {
     font-size: 17px;
   }
   .section-heading > span {
-    font-size: 6px;
+    font-size: 14px;
   }
   dialog {
     padding: 30px 20px;
@@ -1335,7 +1219,7 @@ footer button {
     align-items: start;
   }
   .composer-footer .primary {
-    font-size: 11px;
+    font-size: 14px;
     padding: 11px;
     gap: 10px;
   }
@@ -1350,5 +1234,77 @@ footer button {
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+  }
+}
+
+.review-text {
+  font-size: 16px;
+  line-height: 1.8;
+}
+.nav-item,
+.feed-tabs button,
+.primary,
+.secondary,
+.share-prompt > button:not(.prompt-plus),
+.composer input,
+.composer textarea,
+.preferences select {
+  font-size: 16px;
+}
+.author-link strong,
+.suggested-user .author-link strong {
+  font-size: 16px;
+}
+.eyebrow {
+  letter-spacing: 0.5px;
+}
+.demo-account {
+  margin-top: auto;
+}
+.profile-header {
+  padding-top: 0;
+}
+.brand-mark {
+  line-height: 1;
+  flex-shrink: 0;
+}
+.brand-mark svg {
+  display: block;
+}
+.social-rail {
+  grid-template-columns: 1fr;
+}
+@media (max-width: 640px) {
+  .post-content {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 13px;
+  }
+  .suggested-user {
+    flex-wrap: wrap;
+  }
+  .nav-item {
+    font-size: 14px;
+  }
+  .poster strong,
+  .poster-1 strong,
+  .poster-2 strong {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 640px) {
+  .nav-label,
+  .demo-account {
+    display: none;
+  }
+  .sidebar {
+    gap: 10px;
+  }
+  nav {
+    gap: 0;
+  }
+  .nav-item {
+    white-space: nowrap;
+    padding: 9px 7px;
   }
 }

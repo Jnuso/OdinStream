@@ -44,3 +44,5 @@ The frontend includes Following/Public feeds, public profiles, follow/unfollow c
 All users, reviews, and catalog entries are fixtures. Demo state persists in localStorage under `odinstream-social-demo-v1`; **Reset demo** restores the fixtures. When storage is unavailable, the app works for the session and reports that in the footer. Original CSS poster concepts require no external image service.
 
 This prototype has no backend, real authentication, database connection, live TMDB requests, or recommendation algorithm. Ownership checks in the UI demonstrate the intended experience; actual authentication and authorization must be enforced by FastAPI when integrated. Discover and My Library are separate feature work.
+
+Navigation is encoded in the URL hash. Refresh and browser Back/Forward retain the selected feed or profile and Following/Public tab.
