@@ -16,7 +16,7 @@ Odin Stream is a browser-based movie and television tracking application. It hel
 - Posts require a rating and may include a review. Users edit their original post for a title rather than create another. Posts from public accounts are public; whether private accounts are supported is unresolved.
 - Feeds are newest first for the MVP. Users cannot follow themselves.
 - The primary audience is casual viewers. The product name is Odin Stream.
-- Use the presentation's five screen areas: Discover, My Library, Feed, Profile, and Post. The [Figma sketches](https://www.figma.com/design/ma8S3CmWx675i5hsZFCk2k) are the initial design direction, which the team may refine during development.
+- Use the presentation's five screen areas: Discover, My Library, Feed, Profile, and Post. The selected desktop prototype and mobile sketches are linked in [design references](design/README.md); the team may refine them during development.
 
 ## Proposed MVP capabilities
 
