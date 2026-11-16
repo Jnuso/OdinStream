@@ -2,4 +2,11 @@
 .env
 .env.*
 !.env.example
+
+# Python
 __pycache__/
+
+# Frontend dependencies and build output
+node_modules/
+dist/
+*.local
