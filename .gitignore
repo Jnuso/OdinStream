@@ -3,3 +3,6 @@
 .env.*
 !.env.example
 __pycache__/
+
+# Python virtual environments
+.venv/
