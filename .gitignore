@@ -2,7 +2,12 @@
 .env
 .env.*
 !.env.example
-__pycache__/
 
-# Python virtual environments
+# Python
+__pycache__/
 .venv/
+
+# Frontend dependencies and build output
+node_modules/
+dist/
+*.local
