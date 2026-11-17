@@ -5,6 +5,7 @@ Status: draft for review. These documents prepare the initial task list; Kanban 
 - [Users and goals](users/users-and-goals.md): who the application serves and what they want to accomplish.
 - [MVP scope and decisions](scope-and-decisions.md): agreed direction, proposed behavior, exclusions, and open decisions.
 - [User stories and acceptance criteria](user-stories.md): reviewable outcomes to turn into implementation work.
+- [MVP API contract](api-contract.md): proposed frontend/backend interfaces and decisions for team review.
 - [Draft project backlog](project-backlog.md): a complete starting list for review before creating Trello cards.
 - [Delivery and collaboration](delivery-and-collaboration.md): proposed dependencies, verification, and team workflow.
 - [Screen sketches](https://www.figma.com/design/ma8S3CmWx675i5hsZFCk2k): editable mobile sketches with navigation between the five screens. The sketches are illustrative; their controls are not a functioning application.
