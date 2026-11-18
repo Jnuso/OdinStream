@@ -4,6 +4,21 @@ Status: **for review**, not an approved Trello board or a set of assignments. Th
 
 The scope, stories, and decisions are in [scope and decisions](scope-and-decisions.md), [user stories](user-stories.md), and [delivery and collaboration](delivery-and-collaboration.md). Suggested work areas reflect the presentation and do not assign ownership automatically. Work flows through Kanban; there are no sprint commitments here. Nested checkboxes are suggested smaller pieces that can be assigned to different people; coordinate shared interfaces and integration. A parent is complete only when its applicable substeps and acceptance criteria are complete.
 
+## Implementation status on `deploy/mvp`
+
+Verified against the hosted Supabase project and a local API run of this branch:
+
+- **Discover (5):** live TMDB search, title details, seasons and episodes, U.S. streaming/rental/purchase, TMDB and JustWatch attribution, rate-limit and missing-data messages.
+- **Accounts (4):** sign-up, sign-in, sign-out, password reset and recovery screens on Supabase Auth. Email verification still needs an SMTP provider.
+- **Preferences (4):** favorite genres and streaming services, stored per user with RLS and database tests.
+- **Library and progress (6):** watchlist, movie and show statuses, episode and season marking, next-episode selection, owner-scoped API and tests.
+- **Ratings and posts (7):** `posts`, `profiles` and `follows` migrations, create/edit/delete with ownership checks, duplicate and rating validation, Post screen backed by TMDB instead of fixtures.
+- **Profiles and feeds (8):** public profile with counts, follow/unfollow (no self-follow), public and following feeds newest first, suggested accounts. The mock data module is gone.
+- **Recommendations (9):** favorite-genre ranking with popularity tie-break, popular fallback for new accounts, and exclusions for watched movies and completed/dropped shows.
+- **Deployment (11):** `render.yaml` for a free Render service and all migrations applied to the hosted project.
+
+Still open: real email delivery, TMDB response caching, a responsive/accessibility sweep, Trello card sync, and the Render service itself.
+
 ## 1. Planning and decisions
 
 - [ ] Review and approve the MVP scope, user stories, and acceptance criteria with the team.

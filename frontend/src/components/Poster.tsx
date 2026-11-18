@@ -1,10 +1,27 @@
-import type { Title } from "../data/mock";
+import { initials } from "../data/social";
 
-export default function Poster({ title }: { title: Title }) {
+export default function Poster({
+  name,
+  posterPath,
+  size = "w342",
+}: {
+  name: string;
+  posterPath: string | null;
+  size?: "w185" | "w342";
+}) {
+  if (posterPath) {
+    return (
+      <img
+        className={`poster-image poster-${size}`}
+        src={`https://image.tmdb.org/t/p/${size}${posterPath}`}
+        alt=""
+        loading="lazy"
+      />
+    );
+  }
   return (
-    <div className={`poster poster-${title.id}`} aria-hidden="true">
-      <span className="poster-orbit" />
-      <strong>{title.name}</strong>
+    <div className={`poster-fallback poster-${size}`} aria-hidden="true">
+      <span>{initials(name)}</span>
     </div>
   );
 }

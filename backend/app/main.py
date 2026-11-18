@@ -8,6 +8,8 @@ from app.accounts import router as accounts_router
 from app.catalog import router as catalog_router
 from app.errors import APIError
 from app.library import router as library_router
+from app.recommendations import router as recommendations_router
+from app.social import router as social_router
 from app.settings import get_settings
 
 app = FastAPI(title="Odin Stream API")
@@ -21,6 +23,8 @@ app.add_middleware(
 app.include_router(accounts_router)
 app.include_router(catalog_router)
 app.include_router(library_router)
+app.include_router(social_router)
+app.include_router(recommendations_router)
 
 
 @app.middleware("http")

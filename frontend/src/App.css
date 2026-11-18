@@ -1341,3 +1341,41 @@ footer button {
     padding: 9px 7px;
   }
 }
+
+/* Live TMDB posters */
+.poster-image,
+.poster-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 138px;
+  aspect-ratio: 2 / 3;
+  border-radius: 5px;
+  object-fit: cover;
+  background: linear-gradient(150deg, #ac956d, #302b20);
+  color: #f7e7bd;
+  font-family: Georgia, serif;
+  font-size: 26px;
+  letter-spacing: 1px;
+}
+.poster-w342 {
+  max-width: 170px;
+}
+.recommendations {
+  margin-bottom: 28px;
+}
+.composer-search {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+.composer-search input {
+  flex: 1;
+}
+.profile-settings {
+  margin-bottom: 24px;
+}
+.section-heading p {
+  margin: 4px 0 0;
+}

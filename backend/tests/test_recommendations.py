@@ -1,0 +1,102 @@
+import time
+import unittest
+from unittest.mock import patch
+from uuid import uuid4
+
+import jwt
+from fastapi.testclient import TestClient
+
+from app.accounts import preference_store
+from app.library import library_store
+from app.main import app
+from app.settings import Settings, get_settings
+
+
+class FakePreferences:
+    def __init__(self, genres):
+        self.genres = genres
+
+    def get(self, user_id):
+        return {"favorite_genres": list(self.genres), "streaming_services": []}
+
+
+class FakeLibrary:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def list(self, user_id, media_type, status):
+        return list(self.rows)
+
+
+def discover_result(ids, media_type):
+    return {"results": [{"id": tmdb_id, "media_type": media_type, "popularity": 100 - index,
+                         "title" if media_type == "movie" else "name": f"Title {tmdb_id}",
+                         "poster_path": None, "overview": "", "release_date": "2024-01-01"}
+                        for index, tmdb_id in enumerate(ids)]}
+
+
+class RecommendationTest(unittest.TestCase):
+    def setUp(self):
+        self.secret = "a-test-secret-that-is-longer-than-32-bytes"
+        self.settings = Settings("https://example.supabase.co", self.secret, "", ())
+        app.dependency_overrides[get_settings] = lambda: self.settings
+        self.client = TestClient(app)
+        self.user = str(uuid4())
+
+    def tearDown(self):
+        app.dependency_overrides.clear()
+
+    def headers(self):
+        token = jwt.encode({"sub": self.user, "aud": "authenticated", "iss": self.settings.issuer,
+                            "exp": int(time.time()) + 600, "role": "authenticated"}, self.secret,
+                           algorithm="HS256")
+        return {"Authorization": "Bearer " + token}
+
+    def run_with(self, genres, library_rows, results):
+        app.dependency_overrides[preference_store] = lambda: FakePreferences(genres)
+        app.dependency_overrides[library_store] = lambda: FakeLibrary(library_rows)
+        with patch("app.recommendations.tmdb_get", side_effect=lambda path, params=None: results(path)):
+            return self.client.get("/api/me/recommendations", headers=self.headers())
+
+    def test_genre_matches_are_ranked_and_labelled(self):
+        results = lambda path: discover_result([1, 2] if path.endswith("movie") else [3], path.split("/")[-1])
+        response = self.run_with(["Drama"], [], results)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["basis"], "genres")
+        self.assertEqual(len(body["items"]), 3)
+        self.assertTrue(all(item["reason"] == "Drama" for item in body["items"]))
+
+    def test_watched_and_completed_titles_are_excluded(self):
+        results = lambda path: discover_result([1, 2] if path.endswith("movie") else [3], path.split("/")[-1])
+        library = [
+            {"media_type": "movie", "tmdb_id": 1, "status": "watched"},
+            {"media_type": "tv", "tmdb_id": 3, "status": "completed"},
+        ]
+        body = self.run_with(["Drama"], library, results).json()
+        self.assertEqual([(item["media_type"], item["id"]) for item in body["items"]], [("movie", 2)])
+
+    def test_watchlist_titles_stay_eligible(self):
+        results = lambda path: discover_result([1], "movie") if path.endswith("movie") else {"results": []}
+        body = self.run_with(["Drama"], [{"media_type": "movie", "tmdb_id": 1, "status": "watchlist"}], results).json()
+        self.assertEqual(len(body["items"]), 1)
+
+    def test_new_user_gets_popular_titles(self):
+        trending = {"results": [
+            {"id": 10, "media_type": "movie", "popularity": 9, "title": "Popular", "poster_path": None},
+            {"id": 11, "media_type": "person", "popularity": 9, "name": "Someone"},
+        ]}
+        body = self.run_with([], [], lambda path: trending).json()
+        self.assertEqual(body["basis"], "popular")
+        self.assertEqual([(item["media_type"], item["id"]) for item in body["items"]], [("movie", 10)])
+        self.assertIsNone(body["items"][0]["reason"])
+
+    def test_limit_and_auth(self):
+        results = lambda path: discover_result(list(range(1, 21)), "movie")
+        body = self.run_with(["Comedy"], [], results).json()
+        self.assertEqual(len(body["items"]), 12)
+        self.assertEqual(self.client.get("/api/me/recommendations").status_code, 401)
+
+
+if __name__ == "__main__":
+    unittest.main()
