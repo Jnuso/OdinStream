@@ -1,0 +1,141 @@
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { supabase } from "../data/auth";
+import { api } from "../data/api";
+
+type Preferences = { favorite_genres: string[]; streaming_services: string[] };
+const preferenceOptions = {
+  favorite_genres: ["Action", "Animation", "Comedy", "Documentary", "Drama", "Fantasy", "Horror", "Romance", "Science Fiction", "Thriller"],
+  streaming_services: ["Netflix", "Max", "Apple TV+", "Hulu", "Disney+"],
+};
+
+function AccountPreferences({ token }: { token: string }) {
+  const [preferences, setPreferences] = useState<Preferences | null>(null);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [reload, setReload] = useState(0);
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
+
+  useEffect(() => {
+    let active = true;
+    setPreferences(null); setError(""); setMessage("");
+    api<Preferences>("/api/me/preferences", tokenRef.current)
+      .then(data => { if (active) setPreferences(data); })
+      .catch(err => { if (active) setError(err instanceof Error ? err.message : "Could not load preferences."); });
+    return () => { active = false; };
+  }, [reload]);
+
+  function toggle(key: keyof Preferences, value: string) {
+    setPreferences(previous => {
+      if (!previous) return previous;
+      const selected = previous[key];
+      return { ...previous, [key]: selected.includes(value) ? selected.filter(item => item !== value) : [...selected, value] };
+    });
+    setMessage(""); setError("");
+  }
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (!preferences) return;
+    setSaving(true); setError(""); setMessage("");
+    try {
+      const saved = await api<Preferences>("/api/me/preferences", tokenRef.current, { method: "PUT", body: JSON.stringify(preferences) });
+      setPreferences(saved); setMessage("Preferences saved.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not save preferences."); }
+    finally { setSaving(false); }
+  }
+
+  let content;
+  if (preferences) content = (
+      <form onSubmit={save}>
+        {!preferences.favorite_genres.length && !preferences.streaming_services.length && <p>Choose favorites to personalize your account, or leave them empty for now.</p>}
+        {([ ["favorite_genres", "Favorite genres"], ["streaming_services", "Streaming services"] ] as const).map(([key, label]) =>
+          <fieldset key={key} disabled={saving}><legend>{label}</legend>
+            {preferenceOptions[key].map(option => <label className="service-check" key={option}><input type="checkbox" checked={preferences[key].includes(option)} onChange={() => toggle(key, option)} />{option}</label>)}
+          </fieldset>)}
+        <p className="muted">Availability is limited to the United States.</p>
+        <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save preferences"}</button>
+        {message && <p role="status">{message}</p>}
+      </form>);
+  else content = error
+    ? <button className="secondary" onClick={() => setReload(value => value + 1)}>Retry loading preferences</button>
+    : <p role="status">Loading preferences…</p>;
+  return <section className="account-preferences preferences"><h2>Account preferences</h2>
+    {error && <p className="form-error" role="alert">{error}</p>}
+    {content}
+  </section>;
+}
+
+type Mode = "signin" | "signup" | "reset" | "recovery";
+
+export default function Account({ session, recovery, callbackError, onClearCallbackError, onRecoveryComplete }: {
+  session: Session | null; recovery: boolean; callbackError: string | null;
+  onClearCallbackError: () => void; onRecoveryComplete: () => void;
+}) {
+  const [mode, setMode] = useState<Mode>("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => { if (recovery) setMode("recovery"); }, [recovery]);
+  if (!supabase) return <p>Account access is not configured. Set the public Supabase URL and publishable key for the frontend.</p>;
+  const client = supabase;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault(); setError(""); setMessage(""); onClearCallbackError(); setBusy(true);
+    try {
+      if (mode === "signin") {
+        const { error } = await client.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        setMessage("Signed in.");
+      } else if (mode === "signup") {
+        const { error } = await client.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin + "/" } });
+        if (error) throw error;
+        setMessage("If registration is available for this address, check your email for a confirmation link.");
+      } else if (mode === "reset") {
+        const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + "/" });
+        if (error) throw error;
+        setMessage("If the account exists, check your email for a password reset link.");
+      } else {
+        const { error } = await client.auth.updateUser({ password });
+        if (error) throw error;
+        setMessage("Password updated."); setMode("signin"); onRecoveryComplete();
+      }
+      setPassword("");
+    } catch (err) { setError(err instanceof Error ? err.message : "Account request failed."); }
+    finally { setBusy(false); }
+  }
+
+  async function resend() {
+    setBusy(true); setError(""); setMessage(""); onClearCallbackError();
+    try {
+      const { error } = await client.auth.resend({ type: "signup", email, options: { emailRedirectTo: window.location.origin + "/" } });
+      if (error) throw error;
+      setMessage("If confirmation is pending, check your email for a new link.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not resend confirmation."); }
+    finally { setBusy(false); }
+  }
+
+  if (session && mode !== "recovery") return <section><h1>Account</h1>{callbackError && <p className="form-error" role="alert">{callbackError}</p>}<p>Signed in as {session.user.email}</p><button className="secondary" onClick={async () => {
+    const { error } = await client.auth.signOut();
+    if (error) setError(error.message);
+  }}>Sign out</button>{error && <p className="form-error" role="alert">{error}</p>}<AccountPreferences key={session.user.id} token={session.access_token} /></section>;
+
+  return <section><h1>{mode === "signup" ? "Create account" : mode === "reset" ? "Reset password" : mode === "recovery" ? "Choose a new password" : "Sign in"}</h1>
+    <form className="composer account-form" onSubmit={submit}>
+      {mode !== "recovery" && <><label htmlFor="account-email">Email</label><input id="account-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="email" /></>}
+      {mode !== "reset" && <><label htmlFor="account-password">Password</label><input id="account-password" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={mode === "signin" ? 1 : 8} autoComplete={mode === "signin" ? "current-password" : "new-password"} /></>}
+      {(error || callbackError) && <p className="form-error" role="alert">{error || callbackError}</p>}{message && <p role="status">{message}</p>}
+      <button className="primary" disabled={busy} type="submit">{mode === "signup" ? "Create account" : mode === "reset" ? "Send reset link" : mode === "recovery" ? "Update password" : "Sign in"}</button>
+    </form>
+    {mode !== "recovery" && <div className="account-actions">
+      <button className="secondary" onClick={() => { setMode(mode === "signup" ? "signin" : "signup"); setError(""); setMessage(""); }}>{mode === "signup" ? "Sign in" : "Create account"}</button>
+      <button className="secondary" onClick={() => { setMode(mode === "reset" ? "signin" : "reset"); setError(""); setMessage(""); }}>{mode === "reset" ? "Back to sign in" : "Forgot password?"}</button>
+      <button className="secondary" disabled={!email || busy} onClick={resend}>Resend confirmation</button>
+    </div>}
+  </section>;
+}

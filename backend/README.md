@@ -14,7 +14,7 @@ python -m venv .venv
 
 Open http://127.0.0.1:8000/health to check the server or http://127.0.0.1:8000/docs for interactive API documentation. Stop the server with Ctrl+C.
 
-The initial setup does not connect to Supabase, authenticate users, or serve application data. The team still needs to agree on authentication and database configuration before adding those integrations. Never commit credentials or `.env` files.
+The API includes public TMDB-backed catalog search, title details, U.S. watch providers and TV season details. Set `TMDB_READ_ACCESS_TOKEN` in the backend process environment before starting the server; the backend does not automatically load the project `.env` file. Never commit credentials or `.env` files. The account, preferences and saved-title endpoints require `SUPABASE_URL` and `DATABASE_URL`; HS256 tokens additionally require `SUPABASE_JWT_SECRET`. Configure a dedicated backend login that is a member of `odin_api`, not a database administrator. The API switches to this non-bypass role within each transaction and scopes queries to the verified user. Creating a saved title requires TMDB verification. See `supabase/README.md` for migration and role setup; the frontend's social screens remain a local prototype.
 
 ## Run the health test
 

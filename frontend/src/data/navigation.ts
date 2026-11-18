@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import { currentUserId, users } from "./mock";
 
 type Navigation = {
-  page: "feed" | "profile";
+  page: "discover" | "library" | "account" | "feed" | "profile";
   feed: "following" | "public";
   profileId: string;
 };
@@ -15,7 +15,7 @@ export function useNavigation() {
   const [path, query] = hash.slice(1).split("?");
   const [, section, userId] = (path ?? "").split("/");
   const route: Navigation = {
-    page: section === "profile" ? "profile" : "feed",
+    page: section === "profile" ? "profile" : section === "discover" ? "discover" : section === "library" ? "library" : section === "account" ? "account" : "feed",
     feed:
       new URLSearchParams(query).get("feed") === "public"
         ? "public"
@@ -26,7 +26,7 @@ export function useNavigation() {
   };
   function navigate(next: Navigation) {
     const path =
-      next.page === "profile" ? `/profile/${next.profileId}` : "/feed";
+      next.page === "profile" ? `/profile/${next.profileId}` : `/${next.page}`;
     window.location.hash = `${path}?feed=${next.feed}`;
   }
   return { ...route, navigate };

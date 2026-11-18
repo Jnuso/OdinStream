@@ -1,3 +1,36 @@
+/* Account and library */
+.account-form { max-width: 420px; gap: 10px; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.account-preferences { margin-top: 24px; max-width: 420px; }
+.library-entry { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
+.library-entry > div { flex: 1; min-width: 180px; }
+.library-entry select { margin-left: 8px; padding: 8px; background: #111710; color: inherit; border: 1px solid #ffffff1f; }
+.library-entry > .episode-progress { flex: 1 0 100%; }
+.episode-progress button { margin: 8px 8px 0 0; }
+.episode-progress li { margin: 8px 0; }
+.discover-save { margin-top: 18px; }
+
+/* Discover */
+.discover-search { margin-bottom: 24px; }
+.discover-search label { display: block; margin-bottom: 10px; }
+.discover-search > div { display: flex; gap: 10px; }
+.discover-search input { width: min(500px, 100%); padding: 12px; color: inherit; background: #111710; border: 1px solid #ffffff1f; border-radius: 5px; }
+.discover-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+.discover-result { display: flex; text-align: left; gap: 12px; padding: 12px; background: #191e19; border: 1px solid #ffffff0b; border-radius: 8px; }
+.discover-result img, .discover-no-poster { width: 62px; height: 93px; object-fit: cover; flex-shrink: 0; border-radius: 4px; }
+.discover-no-poster { display: grid; place-items: center; background: #30372e; color: #a5b098; font-size: 12px; }
+.discover-result strong, .discover-result small { display: block; }
+.discover-result small { color: #a5b098; margin-top: 8px; }
+.discover-attribution { color: #a5b098; font-size: 13px; line-height: 1.7; margin-top: 24px; }
+.discover-detail { display: flex; gap: 20px; }
+.discover-detail img { width: 120px; height: fit-content; border-radius: 5px; }
+.discover-detail p, .discover-watch p, .discover-seasons p { line-height: 1.7; margin: 10px 0; }
+.discover-watch, .discover-seasons { margin-top: 24px; }
+.discover-watch a { color: #d5eaa2; }
+.discover-seasons button { margin: 10px 8px 0 0; }
+.discover-seasons li { margin: 12px 0; }
+@media (max-width: 640px) { .discover-detail img { width: 80px; } }
+
 /* Shared shell */
 .sidebar {
   position: fixed;
