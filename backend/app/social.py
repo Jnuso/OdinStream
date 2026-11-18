@@ -208,11 +208,6 @@ class PostgresSocialStore:
         self._run(user_id, """delete from public.follows where follower_id = %s and followee_id = %s
             returning follower_id""", (user_id, profile_id))
 
-    def following_ids(self, user_id: str) -> list[str]:
-        rows = self._run(user_id, "select followee_id from public.follows where follower_id = %s",
-                         (user_id,), many=True)
-        return [str(row["followee_id"]) for row in rows]
-
 
 def social_store(settings: Settings = Depends(get_settings)) -> PostgresSocialStore:
     if not settings.database_url:

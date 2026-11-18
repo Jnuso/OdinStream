@@ -7,8 +7,10 @@ import jwt
 from fastapi.testclient import TestClient
 
 from app.accounts import preference_store
+from app.errors import APIError
 from app.library import library_store
 from app.main import app
+from app.recommendations import MAX_TMDB_CALLS
 from app.settings import Settings, get_settings
 
 
@@ -96,6 +98,68 @@ class RecommendationTest(unittest.TestCase):
         body = self.run_with(["Comedy"], [], results).json()
         self.assertEqual(len(body["items"]), 12)
         self.assertEqual(self.client.get("/api/me/recommendations").status_code, 401)
+
+
+    def test_genre_requests_are_capped(self):
+        import threading
+        calls = []
+        lock = threading.Lock()
+
+        def results(path):
+            with lock:
+                calls.append(path)
+            return discover_result([1, 2], "movie")
+
+        genres = ["Action", "Animation", "Comedy", "Documentary", "Drama", "Fantasy",
+                  "Horror", "Romance", "Science Fiction", "Thriller"]
+        response = self.run_with(genres, [], results)
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(len(calls), MAX_TMDB_CALLS)
+        self.assertGreater(len(calls), 1)
+
+    def test_genre_requests_run_concurrently(self):
+        import threading
+        state = {"active": 0, "peak": 0}
+        lock = threading.Lock()
+
+        def results(path):
+            with lock:
+                state["active"] += 1
+                state["peak"] = max(state["peak"], state["active"])
+            time.sleep(0.05)
+            with lock:
+                state["active"] -= 1
+            return discover_result([1, 2], "movie")
+
+        response = self.run_with(["Drama", "Comedy"], [], results)
+        self.assertEqual(response.status_code, 200)
+        self.assertGreater(state["peak"], 1)
+
+    def test_duplicate_genre_pages_are_fetched_once(self):
+        import threading
+        calls = []
+        lock = threading.Lock()
+
+        def results(path):
+            with lock:
+                calls.append(path)
+            return discover_result([1], "tv")
+
+        # Fantasy and Science Fiction share one TV genre id (10765).
+        self.run_with(["Fantasy", "Science Fiction"], [], results)
+        self.assertEqual(sorted(calls), ["/discover/movie", "/discover/movie", "/discover/tv"])
+
+    def test_a_failed_genre_page_does_not_fail_the_request(self):
+        def results(path, params=None):
+            raise APIError(503, "catalog_rate_limited", "busy")
+
+        app.dependency_overrides[preference_store] = lambda: FakePreferences(["Drama"])
+        app.dependency_overrides[library_store] = lambda: FakeLibrary([])
+        with patch("app.recommendations.tmdb_get", side_effect=results):
+            response = self.client.get("/api/me/recommendations", headers=self.headers())
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["error"], "recommendations_unavailable")
+
 
 
 if __name__ == "__main__":

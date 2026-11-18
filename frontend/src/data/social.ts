@@ -110,9 +110,6 @@ export async function fetchRecommendations(token: string): Promise<{ items: Reco
   return api<{ items: Recommendation[]; basis: string }>("/api/me/recommendations", token);
 }
 
-export async function fetchTitlePosts(token: string, mediaType: MediaType, tmdbId: number): Promise<Post[]> {
-  return (await api<{ items: Post[] }>(`/api/titles/${mediaType}/${tmdbId}/posts`, token)).items;
-}
 
 export function formatYear(releaseDate: string | null) {
   return releaseDate ? releaseDate.slice(0, 4) : "";

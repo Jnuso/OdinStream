@@ -29,6 +29,6 @@ fixtures and local storage are removed.
 - **API:** `backend/` deployable with `render.yaml` (Render free web service, root `backend`, health check `/health`). Required secrets: `SUPABASE_URL`, `DATABASE_URL`, `TMDB_READ_ACCESS_TOKEN`. `CORS_ORIGINS` is pinned to the frontend origins in the file.
 - **Frontend:** builds with `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` and `VITE_API_BASE_URL`.
 - **Identity:** Supabase issues ES256 tokens, verified through the project's JWKS endpoint, so no `SUPABASE_JWT_SECRET` is needed.
-- **Known gaps:** email verification and password reset need an SMTP provider before they work end to end; Render has not been provisioned yet; TMDB responses are not cached.
+- **Known gaps:** email verification and password reset need an SMTP provider before they work end to end; Render has not been provisioned yet; TMDB responses are not cached; the recommendations endpoint caps itself at six de-duplicated discover pages fetched concurrently.
 
 New API routes: `/api/feed`, `/api/profiles`, `/api/profiles/{id}`, `/api/profiles/{id}/posts`, `/api/profiles/{id}/follow`, `/api/me/profile`, `/api/titles/{media_type}/{tmdb_id}/posts`, `/api/posts/{id}` and `/api/me/recommendations`.
