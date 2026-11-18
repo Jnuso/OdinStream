@@ -15,6 +15,7 @@ import Modal from "./components/Modal";
 import Poster from "./components/Poster";
 import PostComposer from "./components/PostComposer";
 import { useNavigation } from "./data/navigation";
+import CatalogDemo from "./components/CatalogDemo";
 import "./App.css";
 
 function Avatar({ user, large = false }: { user: User; large?: boolean }) {
@@ -27,7 +28,7 @@ function Avatar({ user, large = false }: { user: User; large?: boolean }) {
 export default function App() {
   const [state, setState] = useState(readState);
   const { page, feed, profileId, navigate } = useNavigation();
-  const setPage = (page: "feed" | "profile") =>
+  const setPage = (page: "feed" | "profile" | "discover" | "library") =>
     navigate({ page, feed, profileId });
   const setFeed = (feed: "following" | "public") =>
     navigate({ page, feed, profileId });
@@ -99,6 +100,9 @@ export default function App() {
     }
     setComposer(null);
   }
+  if (page === "discover" || page === "library") {
+    return <CatalogDemo page={page} navigate={setPage} onNewPost={() => { setComposer("new"); setPage("feed"); }} />;
+  }
   return (
     <>
       <a
@@ -136,6 +140,8 @@ export default function App() {
         </a>
         <div className="nav-label">Navigation</div>
         <nav aria-label="Main navigation">
+          <button className="nav-item" onClick={() => setPage("discover")}><span aria-hidden="true">⌕</span>Discover</button>
+          <button className="nav-item" onClick={() => setPage("library")}><span aria-hidden="true">▤</span>My Library</button>
           <button
             className={`nav-item ${page === "feed" ? "active" : ""}`}
             aria-current={page === "feed" ? "page" : undefined}
