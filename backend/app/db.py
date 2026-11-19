@@ -13,7 +13,8 @@ _pools: dict[str, ConnectionPool] = {}
 _pool_lock = Lock()
 
 
-def _get_pool(database_url: str) -> ConnectionPool:
+def get_pool(database_url: str) -> ConnectionPool:
+    """Return (or lazily initialize) the shared ConnectionPool for ``database_url``."""
     with _pool_lock:
         pool = _pools.get(database_url)
         if pool is None or pool.closed:
@@ -28,10 +29,13 @@ def _get_pool(database_url: str) -> ConnectionPool:
         return pool
 
 
+_get_pool = get_pool
+
+
 @contextmanager
 def user_connection(database_url: str, user_id: str, *, row_factory: Any = None) -> Iterator[Any]:
     """Yield a pooled connection scoped to `odin_api` and `app.user_id` for one transaction."""
-    pool = _get_pool(database_url)
+    pool = get_pool(database_url)
     with pool.connection() as conn:
         original_factory = conn.row_factory
         if row_factory is not None:
