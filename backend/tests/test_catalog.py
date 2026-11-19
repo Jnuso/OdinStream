@@ -1,25 +1,26 @@
-import io
-import json
-import unittest
 import time
+import unittest
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import httpx
 import jwt
-from unittest.mock import patch
-from urllib.error import HTTPError, URLError
-
 from fastapi.testclient import TestClient
 
-from app.catalog import tmdb_get
 from app.accounts import preference_store
-from app.settings import Settings, get_settings
+from app.catalog import clear_tmdb_cache, tmdb_get
 from app.errors import APIError
 from app.main import app
+from app.settings import Settings, get_settings
 
 
 class CatalogTest(unittest.TestCase):
     def setUp(self):
+        clear_tmdb_cache()
         self.client = TestClient(app)
+
+    def tearDown(self):
+        clear_tmdb_cache()
 
     def test_search_filters_people_and_maps_titles(self):
         results = {"results": [
@@ -42,10 +43,14 @@ class CatalogTest(unittest.TestCase):
         app.dependency_overrides[preference_store] = lambda: type("Store", (), {"get": lambda _, uid: {"streaming_services": ["Netflix"]}})()
         results = {"results": [{"id": 1, "media_type": "movie", "title": "A"},
                                {"id": 2, "media_type": "tv", "name": "B"}], "page": 2, "total_pages": 3}
+
         def upstream(path, params=None):
-            if path == "/search/multi": return results
-            if path == "/movie/1/watch/providers": return {"results": {"US": {"flatrate": [{"provider_id": 8, "provider_name": "Netflix"}]}}}
+            if path == "/search/multi":
+                return results
+            if path == "/movie/1/watch/providers":
+                return {"results": {"US": {"flatrate": [{"provider_id": 8, "provider_name": "Netflix"}]}}}
             return {"results": {"US": {"rent": [{"provider_id": 8}]}}}
+
         try:
             with patch("app.catalog.tmdb_get", side_effect=upstream):
                 response = self.client.get("/api/me/catalog/search?query=A&page=2", headers={"Authorization": "Bearer " + token})
@@ -69,7 +74,7 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(response.json()["details"][0]["field"], "query.page")
 
     def test_details_and_missing_us_availability(self):
-        with patch("app.catalog.tmdb_get", side_effect=[{"id": 1, "title": "A"}, {"results": {}}]):
+        with patch("app.catalog.tmdb_get", return_value={"id": 1, "title": "A", "watch/providers": {"results": {}}}):
             response = self.client.get("/api/catalog/movie/1")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["availability"], {"link": None, "flatrate": [], "rent": [], "buy": []})
@@ -80,11 +85,17 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(self.client.get("/api/catalog/person/1").status_code, 422)
 
     def test_upstream_errors(self):
+        request = httpx.Request("GET", "https://api.themoviedb.org/3/movie/1")
+        errors = [
+            (httpx.HTTPStatusError("404", request=request, response=httpx.Response(404, request=request)), 404),
+            (httpx.HTTPStatusError("429", request=request, response=httpx.Response(429, request=request)), 503),
+            (httpx.ConnectError("offline", request=request), 503),
+        ]
         with patch.dict("os.environ", {"TMDB_READ_ACCESS_TOKEN": "test"}):
-            for error, status in [(HTTPError("url", 404, "", {}, io.BytesIO()), 404),
-                                  (HTTPError("url", 429, "", {}, io.BytesIO()), 503),
-                                  (URLError("offline"), 503)]:
-                with self.subTest(status=status), patch("app.catalog.urlopen", side_effect=error):
+            for error, status in errors:
+                mock_client = MagicMock()
+                mock_client.get.side_effect = error
+                with self.subTest(status=status), patch("app.catalog._get_client", return_value=mock_client):
                     with self.assertRaises(APIError) as raised:
                         tmdb_get("/movie/1")
                     self.assertEqual(raised.exception.status_code, status)

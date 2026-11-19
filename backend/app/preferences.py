@@ -1,11 +1,14 @@
 """Account preferences. Queries are scoped to the verified user id."""
 
+import logging
 from typing import Protocol
 
 import psycopg
-from psycopg import sql
 
+from app.db import user_connection
 from app.errors import APIError
+
+logger = logging.getLogger(__name__)
 
 FAVORITE_GENRES = (
     "Action",
@@ -115,12 +118,11 @@ class PostgresPreferenceStore:
 
     def _run(self, user_id: str, query: str, params: tuple) -> tuple | None:
         try:
-            with psycopg.connect(self.database_url) as conn:
-                conn.execute(sql.SQL("set local role odin_api"))
-                conn.execute("select set_config('app.user_id', %s, true)", (user_id,))
+            with user_connection(self.database_url, user_id) as conn:
                 cursor = conn.execute(query, params)
                 return cursor.fetchone()
         except psycopg.Error as exc:
+            logger.exception("Preferences database query failed")
             raise APIError(
                 503,
                 "preferences_unavailable",

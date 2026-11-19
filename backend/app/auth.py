@@ -1,5 +1,6 @@
 """Verify Supabase access tokens. The user id always comes from the token."""
 
+import logging
 import uuid
 from dataclasses import dataclass
 
@@ -9,6 +10,7 @@ from jwt import PyJWKClient
 from app.errors import APIError
 from app.settings import Settings
 
+logger = logging.getLogger(__name__)
 _ALLOWED_ASYMMETRIC = ("ES256", "RS256")
 _jwk_clients: dict[str, PyJWKClient] = {}
 
@@ -42,6 +44,7 @@ def authenticate(authorization: str | None, settings: Settings) -> Authenticated
     except jwt.ExpiredSignatureError:
         raise _unauthorized("Your session has expired. Sign in again.") from None
     except jwt.PyJWKClientConnectionError:
+        logger.warning("JWKS verification endpoint unavailable for %s", settings.jwks_url)
         raise APIError(503, "authentication_unavailable", "Sign-in verification is temporarily unavailable. Try again.") from None
     except (jwt.PyJWKClientError, jwt.PyJWKSetError, jwt.InvalidTokenError):
         raise _unauthorized("Sign in to continue.") from None
@@ -76,7 +79,7 @@ def _decode_asymmetric(token: str, settings: Settings) -> dict:
         raise _unauthorized("Sign in to continue.")
     client = _jwk_clients.get(settings.jwks_url)
     if client is None:
-        client = PyJWKClient(settings.jwks_url)
+        client = PyJWKClient(settings.jwks_url, timeout=5, lifespan=3600)
         _jwk_clients[settings.jwks_url] = client
     key = client.get_signing_key_from_jwt(token)
     return jwt.decode(
