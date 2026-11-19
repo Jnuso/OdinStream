@@ -16,7 +16,7 @@ Open http://127.0.0.1:8000/health to check the server or http://127.0.0.1:8000/d
 
 The API includes public TMDB-backed catalog search, title details, U.S. watch providers and TV season details. Set `TMDB_READ_ACCESS_TOKEN` in the backend process environment before starting the server; the backend does not automatically load the project `.env` file. Never commit credentials or `.env` files. The account, preferences and saved-title endpoints require `SUPABASE_URL` and `DATABASE_URL`; HS256 tokens additionally require `SUPABASE_JWT_SECRET`. Configure a dedicated backend login that is a member of `odin_api`, not a database administrator. The API switches to this non-bypass role within each transaction and scopes queries to the verified user. Creating a saved title requires TMDB verification. See `supabase/README.md` for migration and role setup; the frontend uses these social endpoints when configured.
 
-## Run the health test
+## Run the test suite
 
 From `backend`, install the test dependencies and run the suite:
 
@@ -25,7 +25,21 @@ From `backend`, install the test dependencies and run the suite:
 .\.venv\Scripts\python -m unittest discover -s tests -v
 ```
 
-GitHub Actions runs the same test on pushes, pull requests, and manual runs. It checks the HTTP response in the test client, not database connectivity or a deployed server.
+GitHub Actions runs the same suite on pushes, pull requests, and manual runs. It checks the HTTP responses in the test client, not database connectivity or a deployed server.
+
+## Production architecture and security hardening
+
+- **Connection pooling (`backend/app/db.py`):** Database access uses a shared `psycopg-pool` `ConnectionPool` (`connect_timeout=5`) with transaction-local `set local role odin_api` and `set_config('app.user_id', ..., true)`.
+- **Health and readiness:** `GET /health` is a fast liveness check (`200 {"status": "ok"}`); `GET /ready` verifies PostgreSQL pool connectivity via `SELECT 1` (`200` or `503`).
+- **Defensive middleware (`backend/app/security_middleware.py`):**
+  - Baseline HTTP security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`).
+  - `Cache-Control: private, no-store` on `/api/me*` and any request carrying an `Authorization` header (using ASGI `scope["path"]` to prevent Host-header path divergence).
+  - 64 KB max JSON payload limit (`413`) and per-IP sliding-window rate limiting (`429` + `Retry-After`; set `RATE_LIMIT_ENABLED=false` to disable in local load tests).
+  - `X-Request-ID` correlation header and structured request logging (without logging `Authorization` headers or tokens).
+- **Live post-deploy smoke test (`tests/test_deploy_smoke.py`):** Run right after Render deploys using only the Python standard library:
+  ```bash
+  BASE_URL=https://odin-stream-api.onrender.com EXPECTED_ORIGIN=https://<your-frontend>.onrender.com CHECK_READY=1 CHECK_SECURITY_HEADERS=1 python3 tests/test_deploy_smoke.py
+  ```
 
 ## Profile privacy and follow requests
 

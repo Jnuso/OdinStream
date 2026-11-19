@@ -1,17 +1,17 @@
-# Local credentials
 .env
 .env.*
 !.env.example
-
-# Python
 __pycache__/
-.venv/
 
-# Frontend dependencies and build output
+# Python virtual environments
+.venv/
 node_modules/
 dist/
 *.local
 .secrets/
+
+# macOS Finder metadata
+.DS_Store
 
 # Supabase CLI link state
 supabase/.temp/

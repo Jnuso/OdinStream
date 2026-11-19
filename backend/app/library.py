@@ -2,20 +2,23 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Literal
 from uuid import UUID
 
 import psycopg
 from fastapi import APIRouter, Depends, Query, Response
-from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from psycopg.rows import dict_row
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from app.accounts import current_user
 from app.auth import AuthenticatedUser
 from app.catalog import tmdb_get
+from app.db import user_connection
 from app.errors import APIError
 from app.settings import Settings, get_settings
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/me/saved-titles", tags=["library"])
 MediaType = Literal["movie", "tv"]
 Status = Literal["watchlist", "watched", "watching", "completed", "paused", "dropped"]
@@ -47,14 +50,13 @@ class PostgresLibraryStore:
 
     def run(self, user_id: str, query: str, parameters: tuple, *, many: bool = False):
         try:
-            with psycopg.connect(self.database_url, row_factory=dict_row) as conn:
-                conn.execute("set local role odin_api")
-                conn.execute("select set_config('app.user_id', %s, true)", (user_id,))
+            with user_connection(self.database_url, user_id, row_factory=dict_row) as conn:
                 cursor = conn.execute(query, parameters)
                 return cursor.fetchall() if many else cursor.fetchone()
         except psycopg.errors.UniqueViolation as exc:
             raise APIError(409, "duplicate_title", "This title is already in your library.") from exc
         except psycopg.Error as exc:
+            logger.exception("Library database query failed")
             raise APIError(503, "library_unavailable", "Your library is unavailable right now. Try again.") from exc
 
     def list(self, user_id: str, media_type: str | None, status: str | None, limit: int | None = None, offset: int = 0):
@@ -104,7 +106,6 @@ class PostgresLibraryStore:
             and w.user_id = s.user_id and w.tmdb_id = s.tmdb_id and w.season_number = %s
             and (%s::integer[] is null or w.episode_number = any(%s::integer[])) returning w.episode_number""",
             (user_id, entry_id, season, numbers, numbers), many=True)
-
 
 
 def library_store(settings: Settings = Depends(get_settings)) -> PostgresLibraryStore:
