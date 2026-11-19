@@ -194,7 +194,7 @@ function ProfileSettings({
   return (
     <section className="rail-card profile-settings">
       <h2>Profile settings</h2>
-      <form onSubmit={submit} className="account-form">
+      <form onSubmit={submit} className="composer account-form">
         <label htmlFor="profile-name">Display name</label>
         <input
           id="profile-name"
