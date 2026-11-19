@@ -8,7 +8,7 @@ insert into auth.users (id, email) values
  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'third@example.test');
 insert into auth.users (id, email) values
  ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'same@example.test'),
- ('ddddddff-dddd-4ddd-8ddd-dddddddddddd', 'same@example.test');
+ ('ddddddff-dddd-4ddd-8ddd-dddddddddddd', 'same@another.test');
 select is((select count(*) from public.profiles where user_id in
  ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'ddddddff-dddd-4ddd-8ddd-dddddddddddd')),
  2::bigint, 'similar users both receive profiles');
