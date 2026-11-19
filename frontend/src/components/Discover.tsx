@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Poster from "./Poster";
 import { api } from "../data/api";
+import { cachedCatalog } from "../data/catalogCache";
 import { fetchRecommendations, formatYear, type MediaType, type Recommendation, type TitleSummary, type Post } from "../data/social";
 import Skeleton from "./Skeleton";
 import TitleDetails from "./TitleDetails";
@@ -13,6 +14,8 @@ type Title = {
   overview: string;
   poster_path: string | null;
 };
+type TrendingTitle = Title & { backdrop_path: string | null };
+
 export default function Discover({
   token,
   focus = null,
@@ -23,6 +26,7 @@ export default function Discover({
   viewerId,
   reloadKey = 0,
   onOpenTitle,
+  onOpenAccount,
 }: {
   token: string | null;
   focus?: { media_type: MediaType; id: number } | null;
@@ -33,9 +37,11 @@ export default function Discover({
   viewerId?: string;
   reloadKey?: number;
   onOpenTitle?: (type: MediaType, id: number) => void;
+  onOpenAccount?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [serviceFilter, setServiceFilter] = useState(false);
+  const [mediaFilter, setMediaFilter] = useState<MediaType | null>(null);
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [resultPage, setResultPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
@@ -45,18 +51,24 @@ export default function Discover({
   const [recommended, setRecommended] = useState<Recommendation[] | null>(null);
   const [recommendedBasis, setRecommendedBasis] = useState("");
   const [recommendedError, setRecommendedError] = useState("");
+  const [services, setServices] = useState<{ token: string; names: string[] } | null>(null);
+  const showServices = Boolean(onOpenAccount);
+  const [trending, setTrending] = useState<TrendingTitle[]>([]);
+  const showTrending = Boolean(onOpenTitle);
   const searchRequest = useRef(0);
   const [localTitle, setLocalTitle] = useState<{ media_type: MediaType; id: number } | null>(null);
 
-  async function loadSearch(text: string, page: number, filter: boolean) {
+  async function loadSearch(text: string, page: number, filter: boolean, type = mediaFilter) {
     if (!text.trim()) return;
     const request = ++searchRequest.current;
     setLoading(true); setError("");
     try {
       const path = filter ? "/api/me/catalog/search" : "/api/catalog/search";
+      const mediaParam = type ? `&media_type=${type}` : "";
       const data = await api<{ items: Title[]; page: number; total_pages: number }>(
-        `${path}?query=${encodeURIComponent(text.trim())}&page=${page}`, filter ? token ?? undefined : undefined);
+        `${path}?query=${encodeURIComponent(text.trim())}&page=${page}${mediaParam}`, filter ? token ?? undefined : undefined);
       if (request === searchRequest.current) {
+        setMediaFilter(type);
         setItems(data.items); setSubmittedQuery(text.trim()); setResultPage(data.page); setTotalPages(data.total_pages);
       }
     } catch (err) {
@@ -66,7 +78,7 @@ export default function Discover({
 
   function search(event: FormEvent) {
     event.preventDefault();
-    void loadSearch(query, 1, serviceFilter);
+    void loadSearch(query, 1, serviceFilter, null);
   }
 
   function toggleServiceFilter() {
@@ -111,33 +123,66 @@ export default function Discover({
     onFocusHandled?.();
   }, [focus, onFocusHandled]);
 
+  useEffect(() => {
+    if (!token || !showServices) return;
+    let active = true;
+    api<{ streaming_services: string[] }>("/api/me/preferences", token)
+      .then(data => {
+        if (active && Array.isArray(data.streaming_services)) {
+          setServices({ token, names: data.streaming_services });
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [token, showServices]);
+
+  useEffect(() => {
+    if (!showTrending) return;
+    let active = true;
+    cachedCatalog<{ items: TrendingTitle[] }>("/api/catalog/trending")
+      .then(data => { if (active && Array.isArray(data.items)) setTrending(data.items); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [showTrending]);
+
   return (
     <section className="discover-page">
-      <div className="page-heading">
-        <div>
-          <h1>Discover</h1>
-          <p>Find your next great watch.</p>
+      <div className="discover-header">
+        <div className="page-heading">
+          <div>
+            <h1>Discover</h1>
+            <p>Find your next great watch.</p>
+          </div>
         </div>
+        <form className="discover-search" onSubmit={search}>
+          <label htmlFor="discover-query">Search titles</label>
+          <div>
+            <input
+              id="discover-query"
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search movies and shows"
+              maxLength={200}
+            />
+            <button className="primary" disabled={loading || !query.trim()} type="submit">
+              Search
+            </button>
+          </div>
+        </form>
       </div>
-      <form className="discover-search" onSubmit={search}>
-        <label htmlFor="discover-query">Search titles</label>
-        <div>
-          <input
-            id="discover-query"
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Movie or show title"
-            maxLength={200}
-          />
-          <button className="primary" disabled={loading || !query.trim()} type="submit">
-            Search
-          </button>
-        </div>
-      </form>
-      <button type="button" className="secondary" aria-pressed={serviceFilter} disabled={loading} onClick={toggleServiceFilter}>
-        Filter by my streaming services: {serviceFilter ? "On" : "Off"}
-      </button>
+      <div className="discover-services">
+        {services?.token === token && services.names.length > 0 && (
+          <div className="service-chips" aria-label="Your streaming services">
+            <span>Your services</span>
+            {services.names.map(name => <span className="service-chip" key={name}>{name}</span>)}
+          </div>
+        )}
+        <button type="button" className="secondary" aria-pressed={serviceFilter} disabled={loading} onClick={toggleServiceFilter}>
+          Filter by my streaming services: {serviceFilter ? "On" : "Off"}
+        </button>
+        {onOpenAccount && <button className="secondary" onClick={onOpenAccount}>Manage services</button>}
+      </div>
       {token && !submittedQuery && (
         <section className="recommendations" aria-label="Recommended titles">
           <div className="section-heading">
@@ -173,10 +218,33 @@ export default function Discover({
           )}
         </section>
       )}
+      {!submittedQuery && trending.length > 0 && (
+        <section className="recommendations trending" aria-label="Trending titles">
+          <div className="section-heading"><h2>Trending this week</h2></div>
+          <div className="discover-results recommendation-grid">
+            {trending.map(item => (
+              <button key={`${item.media_type}-${item.id}`} className="discover-result" onClick={() => openTitle(item.media_type, item.id)}>
+                <Poster name={item.name} posterPath={item.backdrop_path || item.poster_path} size="w342" />
+                <strong>{item.name}</strong>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
       {error && <p role="alert" className="form-error">{error}</p>}
       {loading && !items && <Skeleton label="Loading search results…" variant="rows" />}
       {items && items.length === 0 && <p className="muted">{serviceFilter ? "No matching titles on this page. Try another results page or turn off the filter." : "No titles found. Try another search."}</p>}
-      {submittedQuery && <div className="section-heading search-results-heading"><h2>Results for “{submittedQuery}”</h2><button className="text-button" onClick={() => { searchRequest.current += 1; setLoading(false); setSubmittedQuery(""); setItems(null); setQuery(""); setError(""); setResultPage(1); setTotalPages(0); }}>Clear search</button></div>}
+      {submittedQuery && (
+        <div className="section-heading search-results-heading">
+          <h2>Results for “{submittedQuery}”</h2>
+          <div className="search-filters" aria-label="Title types">
+            {([[null, "All"], ["movie", "Movies"], ["tv", "Shows"]] as const).map(([type, label]) => (
+              <button key={label} className="secondary" aria-pressed={mediaFilter === type} disabled={loading} onClick={() => void loadSearch(submittedQuery, 1, serviceFilter, type)}>{label}</button>
+            ))}
+            <button className="text-button" onClick={() => { searchRequest.current += 1; setLoading(false); setSubmittedQuery(""); setItems(null); setQuery(""); setError(""); setResultPage(1); setTotalPages(0); }}>Clear search</button>
+          </div>
+        </div>
+      )}
       <div className="discover-results">
         {items?.map((item) => (
           <button
