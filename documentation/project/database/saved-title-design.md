@@ -1,10 +1,10 @@
 # Saved titles: first data model and API contract
 
-Status: draft for team review, November 16, 2026. Supabase Auth, TMDB verification before saving, immediate deletion of account records upon account deletion, and the initial statuses and one-status-per-title model were selected. The remaining model and endpoint details are proposals, not implemented behavior or migrations.
+Status: initial implementation in progress. Supabase Auth, TMDB verification before saving, immediate deletion of account records upon account deletion, and the initial statuses and one-status-per-title model were selected. The saved-title table, owner-scoped API role, and initial FastAPI endpoints are implemented; runtime configuration and full end-to-end verification remain necessary. Open model and API decisions remain for team review.
 
 ## Goal and boundaries
 
-A signed-in user can save a movie or TV show from TMDB, see and change its status, and remove it. Records belong to the signed-in user and persist in Supabase PostgreSQL. Visitors can search and browse the catalog without signing in. Ratings, episode progress, recommendations, and full title metadata are separate work.
+A signed-in user can save a movie or TV show from TMDB, see and change its status, and remove it. Records belong to the signed-in user and persist in Supabase PostgreSQL. Visitors can search and browse the catalog without signing in. TV entries also support episode progress as described below. Ratings, recommendations, and full title metadata are separate work.
 
 React uses Supabase Auth for account and session flows. It sends a Supabase access token to FastAPI over HTTPS as `Authorization: Bearer <access_token>`. FastAPI validates the token using Supabase's supported verification method, including signature, issuer, audience, and expiry, and derives the user ID from the verified token. Never accept an owner ID from the request body as proof of identity. Use only a publishable key in browser code; never expose service-role credentials. Registration, verification, reset, and session handling still need implementation and testing.
 
@@ -74,6 +74,12 @@ Use `401` for missing, expired, or invalid tokens; `404` for an entry absent fro
 - Verify token validation and, if used, RLS with real non-privileged test accounts; never use service-role credentials in the frontend.
 - Confirm TMDB rejects nonexistent IDs and mismatched media types, and that a TMDB outage does not create an unverified record or erase existing entries.
 - Verify account deletion removes its saved records and all other account-owned records, without affecting other users.
+
+## TV episode progress
+
+`watched_episodes` stores unique season/episode selections against the owner's saved TV title. Progress is deleted with the saved title or account. The backend verifies TMDB episode numbers before marking them watched; unmarking does not require TMDB so existing selections can be removed during an outage. Browser database roles have no direct access.
+
+Authenticated routes under `/api/me/saved-titles/{id}` provide `GET /episodes`, `PUT` and `DELETE /seasons/{season}/episodes/{episode}`, and `PUT` and `DELETE /seasons/{season}/episodes`. Season marking adds the episodes currently returned by TMDB; season unmarking removes all recorded selections for that season. The library reports the episode following the furthest watched in season/episode order, including season zero where applicable. If metadata needed to determine it is missing, it reports the next episode as unavailable instead of guessing. These choices remain provisional pending the team decisions on out-of-order selections and changed metadata.
 
 ## Team decisions before implementing
 

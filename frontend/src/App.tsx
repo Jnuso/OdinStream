@@ -1,104 +1,128 @@
 import { useEffect, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { authCallbackError, supabase } from "./data/auth";
+import { useNavigation, type Page } from "./data/navigation";
 import {
-  catalog,
-  countryOptions,
-  currentUserId,
-  initialState,
-  serviceOptions,
-  users,
+  avatarColor,
+  fetchMyProfile,
+  fetchSuggestedProfiles,
+  initials,
+  setFollow,
+  type MediaType,
   type Post,
-  type User,
-  type SocialState,
-} from "./data/mock";
-import { readState, storageKey } from "./data/storage";
-import Modal from "./components/Modal";
-import Poster from "./components/Poster";
+  type Profile,
+} from "./data/social";
+import Account from "./components/Account";
+import Discover from "./components/Discover";
+import Feed from "./components/Feed";
+import Library from "./components/Library";
 import PostComposer from "./components/PostComposer";
-import { useNavigation } from "./data/navigation";
+import ProfileScreen from "./components/Profile";
 import "./App.css";
 
-function Avatar({ user, large = false }: { user: User; large?: boolean }) {
+type Focus = { media_type: MediaType; id: number };
+
+function SidebarProfile({ me }: { me: Profile }) {
   return (
-    <span className={`avatar ${user.color} ${large ? "large-avatar" : ""}`}>
-      {user.initials}
+    <span className="demo-account">
+      <span className={`avatar ${avatarColor(me.id)}`}>{initials(me.display_name)}</span>
+      <span>
+        <strong>{me.display_name}</strong>
+        <small>@{me.handle}</small>
+      </span>
+      <span className="online" />
     </span>
   );
 }
+
 export default function App() {
-  const [state, setState] = useState(readState);
-  const { page, feed, profileId, navigate } = useNavigation();
-  const setPage = (page: "feed" | "profile") =>
-    navigate({ page, feed, profileId });
-  const setFeed = (feed: "following" | "public") =>
-    navigate({ page, feed, profileId });
+  const [session, setSession] = useState<Session | null>(null);
+  const [recovery, setRecovery] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(authCallbackError);
+  const [me, setMe] = useState<Profile | null>(null);
+  const [suggested, setSuggested] = useState<Profile[]>([]);
   const [composer, setComposer] = useState<Post | "new" | null>(null);
-  const [selectedTitle, setSelectedTitle] = useState<number | null>(null);
-  const [deleting, setDeleting] = useState<Post | null>(null);
   const [notice, setNotice] = useState("");
-  const [persisted, setPersisted] = useState(true);
-  const me = users.find((user) => user.id === currentUserId)!;
-  const profile = users.find((user) => user.id === profileId)!;
-  const title = catalog.find((item) => item.id === selectedTitle);
-  const ownProfile = profileId === currentUserId;
-  const posts = state.posts
-    .filter((post) =>
-      page === "profile"
-        ? post.userId === profileId
-        : feed === "public" || state.following.includes(post.userId),
-    )
-    .toSorted((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  function updateState(update: (value: SocialState) => SocialState) {
-    const next = update(state);
-    setState(next);
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(next));
-      setPersisted(true);
-    } catch {
-      setPersisted(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [focus, setFocus] = useState<Focus | null>(null);
+  const { page, feed, profileId, navigate } = useNavigation();
+  const token = session?.access_token ?? null;
+  const viewerId = session?.user.id ?? "";
+
+  useEffect(() => {
+    if (!supabase) return;
+    if (authCallbackError) {
+      window.history.replaceState(null, "", window.location.pathname + "#/account");
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
     }
-  }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession(nextSession);
+      if (event === "PASSWORD_RECOVERY") {
+        setRecovery(true);
+        window.location.hash = "#/account";
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!token) {
+      setMe(null);
+      setSuggested([]);
+      return;
+    }
+    let active = true;
+    fetchMyProfile(token).then((profile) => active && setMe(profile)).catch(() => active && setMe(null));
+    fetchSuggestedProfiles(token).then((items) => active && setSuggested(items)).catch(() => active && setSuggested([]));
+    return () => {
+      active = false;
+    };
+  }, [token, reloadKey]);
+
   useEffect(() => {
     if (!notice) return;
-    const timer = setTimeout(() => setNotice(""), 3500);
+    const timer = setTimeout(() => setNotice(""), 4000);
     return () => clearTimeout(timer);
   }, [notice]);
-  function openProfile(id: string) {
-    navigate({ page: "profile", feed, profileId: id });
-  }
-  function toggleFollow(id: string) {
-    if (id === currentUserId) return;
-    updateState((value) => ({
-      ...value,
-      following: value.following.includes(id)
-        ? value.following.filter((item) => item !== id)
-        : [...value.following, id],
-    }));
-  }
-  function savePost(values: Pick<Post, "titleId" | "rating" | "review">) {
-    if (!composer) return;
-    if (composer === "new") {
-      const post: Post = {
-        ...values,
-        id: crypto.randomUUID(),
-        userId: currentUserId,
-        createdAt: new Date().toISOString(),
-      };
-      updateState((value) => ({ ...value, posts: [post, ...value.posts] }));
-      navigate({ page: "feed", feed: "public", profileId });
-      setNotice("Your post is live in the local demo");
-    } else {
-      updateState((value) => ({
-        ...value,
-        posts: value.posts.map((post) =>
-          post.id === composer.id && post.userId === currentUserId
-            ? { ...post, ...values }
-            : post,
-        ),
-      }));
-      setNotice("Your post has been updated");
+
+  const setPage = (next: Page) => navigate({ page: next, feed, profileId });
+  const setFeed = (next: "following" | "public") => navigate({ page: "feed", feed: next, profileId });
+  const openProfile = (id: string) => navigate({ page: "profile", feed, profileId: id });
+  const openTitle = (mediaType: MediaType, id: number) => {
+    setFocus({ media_type: mediaType, id });
+    navigate({ page: "discover", feed, profileId });
+  };
+  const refresh = () => setReloadKey((value) => value + 1);
+
+  function startComposer() {
+    if (!token) {
+      navigate({ page: "account", feed, profileId });
+      setNotice("Sign in to rate movies and shows.");
+      return;
     }
-    setComposer(null);
+    setComposer("new");
   }
+
+  async function toggleFollow(profile: Profile) {
+    if (!token) return;
+    try {
+      await setFollow(token, profile.id, !profile.viewer_follows);
+      refresh();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "The follow could not be saved.");
+    }
+  }
+
+  const signInPrompt = (what: string) => (
+    <section className="empty">
+      <h2>Sign in to see {what}.</h2>
+      <p>Feeds, profiles and your library are tied to an account.</p>
+      <button className="primary" onClick={() => setPage("account")}>
+        Go to Account
+      </button>
+    </section>
+  );
+
   return (
     <>
       <a
@@ -114,7 +138,7 @@ export default function App() {
       <aside className="sidebar">
         <a
           className="brand"
-          href="#"
+          href="#/feed"
           onClick={(event) => {
             event.preventDefault();
             setPage("feed");
@@ -136,421 +160,138 @@ export default function App() {
         </a>
         <div className="nav-label">Navigation</div>
         <nav aria-label="Main navigation">
-          <button
-            className={`nav-item ${page === "feed" ? "active" : ""}`}
-            aria-current={page === "feed" ? "page" : undefined}
-            onClick={() => setPage("feed")}
-          >
+          <button className={`nav-item ${page === "discover" ? "active" : ""}`} aria-current={page === "discover" ? "page" : undefined} onClick={() => setPage("discover")}>
+            <span aria-hidden="true">⌕</span>Discover
+          </button>
+          <button className={`nav-item ${page === "library" ? "active" : ""}`} aria-current={page === "library" ? "page" : undefined} onClick={() => setPage("library")}>
+            <span aria-hidden="true">▤</span>My Library
+          </button>
+          <button className={`nav-item ${page === "feed" ? "active" : ""}`} aria-current={page === "feed" ? "page" : undefined} onClick={() => setPage("feed")}>
             <span aria-hidden="true">◉</span>Feed
           </button>
           <button
-            className={`nav-item ${page === "profile" && ownProfile ? "active" : ""}`}
-            aria-current={page === "profile" && ownProfile ? "page" : undefined}
-            onClick={() => openProfile(currentUserId)}
+            className={`nav-item ${page === "profile" ? "active" : ""}`}
+            aria-current={page === "profile" ? "page" : undefined}
+            onClick={() => (token ? openProfile("me") : setPage("account"))}
           >
             <span aria-hidden="true">◎</span>My Profile
           </button>
+          <button className={`nav-item ${page === "account" ? "active" : ""}`} aria-current={page === "account" ? "page" : undefined} onClick={() => setPage("account")}>
+            <span aria-hidden="true">○</span>Account
+          </button>
         </nav>
-        <button className="primary new-post" onClick={() => setComposer("new")}>
+        <button className="primary new-post" onClick={startComposer}>
           <span>+</span> New post
         </button>
-        <button
-          className="demo-account"
-          onClick={() => openProfile(currentUserId)}
-        >
-          <Avatar user={me} />
-          <span>
-            <strong>Raif Rashid</strong>
-            <small>Demo account</small>
-          </span>
-          <span className="online" />
-        </button>
+        {me ? <SidebarProfile me={me} /> : <p className="rail-footnote">Not signed in</p>}
       </aside>
       <div className="workspace">
         <header className="topbar">
-          <span>Social prototype</span>
+          <span>
+            {page === "discover" ? "Discover" : page === "library" ? "My Library" : page === "account" ? "Account" : page === "feed" ? "Feed" : "Profile"}
+          </span>
           <div>
-            <span className="demo-badge">● MOCK DATA</span>
-            <span className="country">{state.country}</span>
-            <Avatar user={me} />
+            <span className="country">United States</span>
+            {me && <span className={`avatar ${avatarColor(me.id)}`}>{initials(me.display_name)}</span>}
           </div>
         </header>
         <main id="main" tabIndex={-1}>
-          {page === "feed" ? (
-            <div className="page-heading">
-              <div>
-                <h1>Feed</h1>
-                <p>Movie and show ratings and reviews.</p>
-              </div>
-            </div>
-          ) : (
-            <>
-              <section
-                className="profile-header"
-                aria-label={`${profile.name} profile`}
-              >
-                <Avatar user={profile} large />
-                <div className="profile-identity">
-                  <span className="eyebrow">@{profile.handle}</span>
-                  <h1>{profile.name}</h1>
-                  <p>{profile.bio}</p>
-                  <div className="profile-stats">
-                    <span>
-                      <strong>
-                        {
-                          state.posts.filter(
-                            (post) => post.userId === profileId,
-                          ).length
-                        }
-                      </strong>{" "}
-                      Posts
-                    </span>
-                    {ownProfile ? (
-                      <span>
-                        <strong>{state.following.length}</strong> Following
-                      </span>
-                    ) : (
-                      <span>
-                        {state.following.includes(profileId)
-                          ? "You follow this account"
-                          : "Sample public profile"}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {!ownProfile && (
-                  <button
-                    className={
-                      state.following.includes(profileId)
-                        ? "secondary"
-                        : "primary"
-                    }
-                    onClick={() => toggleFollow(profileId)}
-                  >
-                    {state.following.includes(profileId)
-                      ? "Unfollow"
-                      : "+ Follow"}
-                  </button>
-                )}
-              </section>
-            </>
-          )}
-          <div className="social-layout">
-            <div className="feed-column">
-              {page === "feed" ? (
-                <>
-                  <section className="share-prompt">
-                    <Avatar user={me} />
-                    <button onClick={() => setComposer("new")}>
-                      Write a review…
-                    </button>
-                    <button
-                      className="prompt-plus"
-                      aria-label="Create a new post"
-                      onClick={() => setComposer("new")}
-                    >
-                      +
-                    </button>
-                  </section>
-                  <div className="feed-tabs" aria-label="Feed selection">
-                    <button
-                      aria-pressed={feed === "following"}
-                      className={feed === "following" ? "active" : ""}
-                      onClick={() => setFeed("following")}
-                    >
-                      Following <span>{state.following.length}</span>
-                    </button>
-                    <button
-                      aria-pressed={feed === "public"}
-                      className={feed === "public" ? "active" : ""}
-                      onClick={() => setFeed("public")}
-                    >
-                      Public
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="section-heading">
-                  <h2>
-                    {ownProfile ? "Your" : `${profile.name.split(" ")[0]}’s`}{" "}
-                    ratings & reviews
-                  </h2>
-                </div>
-              )}
-              <div className="post-list">
-                {posts.map((post) => {
-                  const author = users.find((user) => user.id === post.userId)!;
-                  const movie = catalog.find(
-                    (item) => item.id === post.titleId,
-                  )!;
-                  return (
-                    <article
-                      className="post-card"
-                      key={post.id}
-                      aria-label={`${author.name} on ${movie.name}`}
-                    >
-                      <div className="post-author">
-                        <button
-                          className="author-link"
-                          onClick={() => openProfile(author.id)}
-                        >
-                          <Avatar user={author} />
-                          <span>
-                            <strong>{author.name}</strong>
-                            <small>@{author.handle}</small>
-                          </span>
-                        </button>
-                        <time dateTime={post.createdAt}>
-                          {new Date(post.createdAt).toLocaleDateString(
-                            "en-US",
-                            { month: "short", day: "numeric" },
-                          )}
-                        </time>
-                      </div>
-                      <div className="post-content">
-                        <button
-                          className="poster-button"
-                          aria-label={`Open ${movie.name} details`}
-                          onClick={() => setSelectedTitle(movie.id)}
-                        >
-                          <Poster title={movie} />
-                        </button>
-                        <div className="post-review">
-                          <span className="eyebrow">
-                            {movie.kind} · {movie.year}
-                          </span>
-                          <button
-                            className="title-link"
-                            onClick={() => setSelectedTitle(movie.id)}
-                          >
-                            {movie.name} <span>↗</span>
-                          </button>
-                          <span
-                            className="stars"
-                            aria-label={`${post.rating} out of 5 stars`}
-                          >
-                            {"★".repeat(post.rating)}
-                            <span>{"★".repeat(5 - post.rating)}</span>
-                          </span>
-                          {post.review ? (
-                            <p className="review-text">{post.review}</p>
-                          ) : (
-                            <p className="muted review-text">
-                              No written review.
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="post-footer">
-                        {post.userId === currentUserId ? (
-                          <div>
-                            <button onClick={() => setComposer(post)}>
-                              Edit post
-                            </button>
-                            <button onClick={() => setDeleting(post)}>
-                              Delete
-                            </button>
-                          </div>
-                        ) : (
-                          <button onClick={() => openProfile(author.id)}>
-                            View profile <span>→</span>
-                          </button>
-                        )}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-              {!posts.length && (
-                <section className="empty">
-                  <h2>
-                    {page === "profile"
-                      ? "No posts yet."
-                      : "No posts from followed accounts."}
-                  </h2>
-                  <p>
-                    {page === "profile"
-                      ? "Ratings and reviews will appear here."
-                      : "Follow someone to see their reviews, or explore the public feed."}
-                  </p>
-                  {page === "feed" ? (
-                    <button
-                      className="primary"
-                      onClick={() => setFeed("public")}
-                    >
-                      Explore public feed →
-                    </button>
-                  ) : (
-                    ownProfile && (
-                      <button
-                        className="primary"
-                        onClick={() => setComposer("new")}
-                      >
-                        Write your first post →
-                      </button>
-                    )
-                  )}
-                </section>
-              )}
-            </div>
-            <aside
-              className="social-rail"
-              aria-label="Community and preferences"
-            >
-              {page === "profile" && ownProfile && (
-                <section className="rail-card preferences">
-                  <h2>Preferences</h2>
-                  <label htmlFor="country">Country</label>
-                  <select
-                    id="country"
-                    value={state.country}
-                    onChange={(event) =>
-                      updateState((value) => ({
-                        ...value,
-                        country: event.target.value,
-                      }))
-                    }
-                  >
-                    {countryOptions.map((country) => (
-                      <option key={country}>{country}</option>
-                    ))}
-                  </select>
-                  <fieldset>
-                    <legend>Your services</legend>
-                    {serviceOptions.map((service) => (
-                      <label className="service-check" key={service}>
-                        <input
-                          type="checkbox"
-                          checked={state.services.includes(service)}
-                          onChange={() =>
-                            updateState((value) => ({
-                              ...value,
-                              services: value.services.includes(service)
-                                ? value.services.filter(
-                                    (item) => item !== service,
-                                  )
-                                : [...value.services, service],
-                            }))
-                          }
-                        />
-                        {service}
-                      </label>
-                    ))}
-                  </fieldset>
-                  <p className="muted small">
-                    Saved locally. Live availability and recommendations will
-                    connect later.
-                  </p>
-                </section>
-              )}
-              <section className="rail-card">
-                <h2>Suggested accounts</h2>
-                {users
-                  .filter((user) => user.id !== currentUserId)
-                  .map((user) => (
-                    <div className="suggested-user" key={user.id}>
-                      <button
-                        className="author-link"
-                        onClick={() => openProfile(user.id)}
-                      >
-                        <Avatar user={user} />
-                        <span>
-                          <strong>{user.name}</strong>
-                          <small>@{user.handle}</small>
-                        </span>
-                      </button>
-                      <button
-                        className={`follow-button ${state.following.includes(user.id) ? "is-following" : ""}`}
-                        aria-label={`${state.following.includes(user.id) ? "Unfollow" : "Follow"} ${user.name}`}
-                        onClick={() => toggleFollow(user.id)}
-                      >
-                        {state.following.includes(user.id)
-                          ? "Following"
-                          : "+ Follow"}
-                      </button>
+          {page === "discover" ? (
+            <Discover token={token} focus={focus} onFocusHandled={() => setFocus(null)} />
+          ) : page === "library" ? (
+            <Library key={viewerId || "signed-out"} token={token} />
+          ) : page === "account" ? (
+            <Account
+              session={session}
+              recovery={recovery}
+              callbackError={authError}
+              onClearCallbackError={() => setAuthError(null)}
+              onRecoveryComplete={() => setRecovery(false)}
+            />
+          ) : page === "feed" ? (
+            token ? (
+              <div className="social-layout">
+                <div className="feed-column">
+                  <div className="page-heading">
+                    <div>
+                      <h1>Feed</h1>
+                      <p>Movie and show ratings and reviews.</p>
                     </div>
-                  ))}
-                <p className="rail-footnote">Sample accounts.</p>
-              </section>
-              <p className="prototype-note">
-                LOCAL FRONTEND PROTOTYPE
-                <br />
-                Sample accounts & reviews. No live social network.
-              </p>
-            </aside>
-          </div>
+                  </div>
+                  <Feed
+                    token={token}
+                    viewerId={viewerId}
+                    scope={feed}
+                    onScope={setFeed}
+                    onOpenProfile={openProfile}
+                    onOpenTitle={openTitle}
+                    onEdit={setComposer}
+                    onNewPost={startComposer}
+                    reloadKey={reloadKey}
+                  />
+                </div>
+                <aside className="social-rail" aria-label="Suggested accounts">
+                  <section className="rail-card">
+                    <h2>Suggested accounts</h2>
+                    {suggested.length === 0 && <p className="muted small">No other accounts yet.</p>}
+                    {suggested.map((profile) => (
+                      <div className="suggested-user" key={profile.id}>
+                        <button className="author-link" onClick={() => openProfile(profile.id)}>
+                          <span className={`avatar ${avatarColor(profile.id)}`}>{initials(profile.display_name)}</span>
+                          <span>
+                            <strong>{profile.display_name}</strong>
+                            <small>@{profile.handle}</small>
+                          </span>
+                        </button>
+                        <button
+                          className={`follow-button ${profile.viewer_follows ? "is-following" : ""}`}
+                          aria-label={`${profile.viewer_follows ? "Unfollow" : "Follow"} ${profile.display_name}`}
+                          onClick={() => toggleFollow(profile)}
+                        >
+                          {profile.viewer_follows ? "Following" : "+ Follow"}
+                        </button>
+                      </div>
+                    ))}
+                  </section>
+                </aside>
+              </div>
+            ) : (
+              signInPrompt("the feed")
+            )
+          ) : token ? (
+            <ProfileScreen
+              token={token}
+              viewerId={viewerId}
+              profileId={profileId}
+              reloadKey={reloadKey}
+              onOpenProfile={openProfile}
+              onOpenTitle={openTitle}
+              onEdit={setComposer}
+              onChanged={refresh}
+              onOpenAccount={() => setPage("account")}
+            />
+          ) : (
+            signInPrompt("your profile")
+          )}
           <footer>
             <span>
               <strong>OdinStream</strong>
             </span>
-            <span>
-              {persisted
-                ? "Demo saved in this browser"
-                : "Storage unavailable · session only"}
-            </span>
-            <button
-              onClick={() => {
-                updateState(() => initialState);
-                setNotice("Social demo reset");
-              }}
-            >
-              Reset demo
-            </button>
+            <span>Movie and TV data from TMDB. Availability provided by JustWatch.</span>
           </footer>
         </main>
       </div>
-      {composer && (
+      {composer && token && (
         <PostComposer
+          token={token}
           post={composer === "new" ? undefined : composer}
           onClose={() => setComposer(null)}
-          onSave={savePost}
+          onSaved={(message) => {
+            setComposer(null);
+            setNotice(message);
+            refresh();
+          }}
         />
-      )}
-      {title && (
-        <Modal label="Title details" onClose={() => setSelectedTitle(null)}>
-          <div className="title-detail">
-            <Poster title={title} />
-            <div>
-              <span className="eyebrow">
-                {title.kind} · {title.year} · {title.genre}
-              </span>
-              <h2>{title.name}</h2>
-              <p>{title.description}</p>
-              <span className="muted small">
-                Sample catalog detail. Live TMDB integration is future work.
-              </span>
-            </div>
-          </div>
-        </Modal>
-      )}
-      {deleting && (
-        <Modal label="Delete post" onClose={() => setDeleting(null)}>
-          <h2>Delete this post?</h2>
-          <p className="muted">
-            This removes it from your local demo profile and feed.
-          </p>
-          <div className="confirmation-actions">
-            <button className="secondary" onClick={() => setDeleting(null)}>
-              Keep post
-            </button>
-            <button
-              className="primary"
-              onClick={() => {
-                updateState((value) => ({
-                  ...value,
-                  posts: value.posts.filter(
-                    (post) =>
-                      post.id !== deleting.id || post.userId !== currentUserId,
-                  ),
-                }));
-                setDeleting(null);
-                setNotice("Post deleted from the local demo");
-              }}
-            >
-              Delete post
-            </button>
-          </div>
-        </Modal>
       )}
       <div className={`toast ${notice ? "visible" : ""}`} role="status">
         {notice}

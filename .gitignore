@@ -11,3 +11,7 @@ __pycache__/
 node_modules/
 dist/
 *.local
+.secrets/
+
+# Supabase CLI link state
+supabase/.temp/

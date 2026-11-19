@@ -17,3 +17,18 @@ The project proposal and presentation are in this folder. They differ in some as
 ## Repository guidance
 
 `AGENTS.md` describes the agreed commit convention: `type: description`, without sequential numbers. Commit and push only when authorized. Course requirements are in `documentation/guidelines/4095/`; the general guides under `documentation/guidelines/other/` are optional reference material synthesized from earlier course materials. Preserve teammates' changes and check the remote before editing.
+
+## Deployment snapshot
+
+The MVP is implemented on branch `deploy/mvp` (PR #11) on top of `main`: live TMDB Discover,
+Supabase Auth accounts and preferences, the personal library with episode tracking, profiles,
+ratings/reviews, public and following feeds, and recommendation endpoints. The social prototype's
+fixtures and local storage are removed.
+
+- **Database:** hosted Supabase project `vpzqsjrzesxnotprfotg` (Postgres 17, West US/Oregon) has every migration applied. The API connects as the least-privilege `odin_api_login` login (member of `odin_api`, `NOINHERIT`, no bypass RLS) over the session pooler `aws-1-us-west-2.pooler.supabase.com:5432`.
+- **API:** `backend/` deployable with `render.yaml` (Render free web service, root `backend`, health check `/health`). Required secrets: `SUPABASE_URL`, `DATABASE_URL`, `TMDB_READ_ACCESS_TOKEN`. `CORS_ORIGINS` is pinned to the frontend origins in the file.
+- **Frontend:** builds with `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` and `VITE_API_BASE_URL`.
+- **Identity:** Supabase issues ES256 tokens, verified through the project's JWKS endpoint, so no `SUPABASE_JWT_SECRET` is needed.
+- **Known gaps:** email verification and password reset need an SMTP provider before they work end to end; Render has not been provisioned yet; TMDB responses are not cached; the recommendations endpoint caps itself at six de-duplicated discover pages fetched concurrently.
+
+New API routes: `/api/feed`, `/api/profiles`, `/api/profiles/{id}`, `/api/profiles/{id}/posts`, `/api/profiles/{id}/follow`, `/api/me/profile`, `/api/titles/{media_type}/{tmdb_id}/posts`, `/api/posts/{id}` and `/api/me/recommendations`.
