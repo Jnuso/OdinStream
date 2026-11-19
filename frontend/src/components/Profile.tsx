@@ -156,6 +156,7 @@ export default function Profile({
           <PostList
             token={token}
             posts={posts}
+            showProfileLink={false}
             viewerId={viewerId}
             onOpenProfile={onOpenProfile}
             onOpenTitle={onOpenTitle}

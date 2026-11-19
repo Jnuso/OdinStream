@@ -38,7 +38,7 @@ it("approves and declines requests, updating the badge until none remain", async
   await screen.findByRole("img", { name: "1 pending follow request" });
   expect(screen.queryByRole("button", { name: "Approve Maya" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Decline Leo" }));
-  await screen.findByText("No pending follow requests.");
+  await waitFor(() => expect(screen.queryByRole("heading", { name: "Follow requests" })).toBeNull());
   expect(screen.queryByRole("img")).toBeNull();
   expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith("/maya/approve") && init?.method === "POST")).toBe(true);
   expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith("/leo/decline") && init?.method === "POST")).toBe(true);
@@ -74,5 +74,5 @@ it("clears another account's requests immediately on account change", async () =
   expect(screen.queryByRole("button", { name: "Approve Maya" })).toBeNull();
   expect(screen.queryByRole("img")).toBeNull();
   await act(async () => finish(new Response(JSON.stringify({ items: [], next_offset: null }))));
-  await waitFor(() => expect(screen.getByText("No pending follow requests.")).toBeTruthy());
+  await waitFor(() => expect(screen.queryByRole("heading", { name: "Follow requests" })).toBeNull());
 });
