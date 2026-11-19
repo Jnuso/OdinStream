@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
+from io import BytesIO
 from typing import Literal
 from uuid import UUID
 
 import psycopg
 from fastapi import APIRouter, Depends, Query, Response
+from PIL import Image
 from psycopg.rows import dict_row
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -27,6 +30,7 @@ POST_COLUMNS = """post.id, post.media_type, post.tmdb_id, post.title_name, post.
     post.release_date, post.rating, post.review, post.created_at, post.updated_at,
     author.user_id as author_id, author.display_name as author_name, author.handle as author_handle"""
 PROFILE_COLUMNS = """profile.user_id, profile.display_name, profile.handle,
+    profile.picture_jpeg is not null as has_picture,
     case when profile.visibility = 'private' and profile.user_id <> nullif(current_setting('app.user_id', true), '')::uuid
       and not exists(select 1 from public.follows f where f.follower_id = nullif(current_setting('app.user_id', true), '')::uuid and f.followee_id = profile.user_id and f.status = 'following')
       then '' else profile.bio end as bio, profile.visibility,
@@ -61,6 +65,10 @@ class ProfileInput(BaseModel):
     bio: str = Field(default="", max_length=280)
 
 
+class ProfilePictureInput(BaseModel):
+    jpeg: str = Field(max_length=60000)
+
+
 def shape_post(row: dict) -> dict:
     return {
         "id": str(row["id"]),
@@ -87,6 +95,7 @@ def shape_profile(row: dict) -> dict:
         "display_name": row["display_name"],
         "handle": row["handle"],
         "bio": row["bio"],
+        "has_picture": row.get("has_picture", False),
         "post_count": row["post_count"] if row["can_view_posts"] else 0,
         "follower_count": row["follower_count"] if row["can_view_posts"] else 0,
         "following_count": row["following_count"] if row["can_view_posts"] else 0,
@@ -192,6 +201,16 @@ class PostgresSocialStore:
         if row is None:
             raise APIError(404, "profile_not_found", "Profile not found.")
         return shape_profile(row)
+
+    def profile_picture(self, viewer_id: str, profile_id: str) -> bytes | None:
+        row = self._run(viewer_id, "select picture_jpeg from public.profiles where user_id = %s", (profile_id,))
+        return row["picture_jpeg"] if row else None
+
+    def update_profile_picture(self, user_id: str, picture: bytes) -> None:
+        row = self._run(user_id, "update public.profiles set picture_jpeg = %s where user_id = %s returning user_id",
+                        (picture, user_id))
+        if not row:
+            raise APIError(404, "profile_not_found", "Profile not found.")
 
     def profiles(self, viewer_id: str, limit: int) -> list[dict]:
         rows = self._run(viewer_id, f"""
@@ -299,6 +318,37 @@ def read_profiles(limit: int = Query(default=5, ge=1, le=20),
 def read_profile(profile_id: UUID, user: AuthenticatedUser = Depends(current_user),
                  store: PostgresSocialStore = Depends(social_store)) -> dict:
     return store.profile(user.id, str(profile_id))
+
+
+@router.get("/profiles/{profile_id}/picture")
+def read_profile_picture(profile_id: UUID, user: AuthenticatedUser = Depends(current_user),
+                         store: PostgresSocialStore = Depends(social_store)):
+    picture = store.profile_picture(user.id, str(profile_id))
+    if not picture:
+        raise APIError(404, "picture_not_found", "Profile picture not found.")
+    return {"jpeg": base64.b64encode(picture).decode("ascii")}
+
+
+@router.put("/me/profile/picture", status_code=204)
+def upload_profile_picture(body: ProfilePictureInput, user: AuthenticatedUser = Depends(current_user),
+                           store: PostgresSocialStore = Depends(social_store)):
+    try:
+        uploaded = base64.b64decode(body.jpeg, validate=True)
+        with Image.open(BytesIO(uploaded), formats=("JPEG",)) as source:
+            if not 1 <= source.width == source.height <= 192:
+                raise ValueError("Expected a square JPEG up to 192 pixels.")
+            with Image.new("RGB", source.size) as clean:
+                # Copy pixels only. Never carry over metadata or trailing bytes.
+                clean.paste(source)
+                output = BytesIO()
+                clean.save(output, format="JPEG", quality=85)
+        picture = output.getvalue()
+    except (ValueError, OSError, Image.DecompressionBombError) as exc:
+        raise APIError(422, "invalid_picture", "Choose a valid profile picture.") from exc
+    if len(picture) > 45000:
+        raise APIError(422, "invalid_picture", "Choose a smaller profile picture.")
+    store.update_profile_picture(user.id, picture)
+    return Response(status_code=204)
 
 
 @router.get("/profiles/{profile_id}/posts")

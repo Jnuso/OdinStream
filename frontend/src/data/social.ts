@@ -21,6 +21,7 @@ export type Profile = {
   display_name: string;
   handle: string;
   bio: string;
+  has_picture?: boolean;
   post_count: number;
   follower_count: number;
   following_count: number;
