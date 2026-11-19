@@ -11,6 +11,7 @@ import {
   type MediaType,
   type Post,
   type Profile,
+  type TitleSummary,
 } from "./data/social";
 import Account from "./components/Account";
 import Setup from "./components/Setup";
@@ -49,6 +50,7 @@ export default function App() {
   const [me, setMe] = useState<Profile | null>(null);
   const [suggested, setSuggested] = useState<Profile[]>([]);
   const [composer, setComposer] = useState<Post | "new" | null>(null);
+  const [reviewTitle, setReviewTitle] = useState<TitleSummary | null>(null);
   const [notice, setNotice] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [focus, setFocus] = useState<Focus | null>(null);
@@ -114,6 +116,7 @@ export default function App() {
   const refresh = () => setReloadKey((value) => value + 1);
 
   function startComposer() {
+    setReviewTitle(null);
     if (!token) {
       navigate({ page: "account", feed, profileId });
       setNotice("Sign in to rate movies and shows.");
@@ -230,7 +233,7 @@ export default function App() {
         </header>
         <main id="main" tabIndex={-1}>
           {page === "discover" ? (
-            <Discover token={token} focus={focus} onFocusHandled={() => setFocus(null)} />
+            <Discover token={token} focus={focus} onFocusHandled={() => setFocus(null)} onReview={title => { setReviewTitle(title); setComposer("new"); }} onOpenProfile={openProfile} onEdit={setComposer} viewerId={viewerId} reloadKey={reloadKey} />
           ) : page === "library" ? (
             <Library key={viewerId || "signed-out"} token={token} onOpenTitle={openTitle} />
           ) : page === "account" ? (
@@ -324,6 +327,7 @@ export default function App() {
         <PostComposer
           token={token}
           post={composer === "new" ? undefined : composer}
+          initialTitle={reviewTitle}
           onClose={() => setComposer(null)}
           onSaved={(message) => {
             setComposer(null);
