@@ -11,13 +11,16 @@ export default function PostComposer({
   post,
   onClose,
   onSaved,
+  initialTitle,
 }: {
   token: string;
   post?: Post;
   onClose: () => void;
   onSaved: (message: string) => void;
+  initialTitle?: TitleSummary | null;
 }) {
   const [query, setQuery] = useState("");
+  const [choosingTitle, setChoosingTitle] = useState(!post && !initialTitle);
   const [results, setResults] = useState<TitleSummary[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
@@ -30,7 +33,7 @@ export default function PostComposer({
           poster_path: post.poster_path,
           release_date: post.release_date,
         }
-      : null,
+      : initialTitle ?? null,
   );
   const [rating, setRating] = useState(post?.rating ?? 0);
   const [review, setReview] = useState(post?.review ?? "");
@@ -84,7 +87,7 @@ export default function PostComposer({
       <h2>{post ? "Edit post" : "New post"}</h2>
       <p className="muted">Choose a title, add a rating, and optionally write a review.</p>
       <form onSubmit={submit} className="composer">
-        {!post && (
+        {!post && choosingTitle && (
           <>
             <label htmlFor="title-search">Search movies and shows</label>
             <div className="composer-search">
@@ -121,6 +124,7 @@ export default function PostComposer({
                       release_date: item.release_date,
                     });
                     setError("");
+                    setChoosingTitle(false);
                   }}
                 >
                   <strong>{item.name}</strong>
@@ -145,6 +149,7 @@ export default function PostComposer({
                 {formatYear(choice.release_date) ? ` · ${formatYear(choice.release_date)}` : ""}
               </p>
             </div>
+            {!post && <button type="button" className="text-button" onClick={() => setChoosingTitle(!choosingTitle)}>{choosingTitle ? "Keep this title" : "Change"}</button>}
           </div>
         )}
         <fieldset className="rating-input">

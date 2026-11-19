@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchFeed, type Post } from "../data/social";
 import PostList from "./PostList";
+import Skeleton from "./Skeleton";
 
 export default function Feed({
   token,
@@ -23,32 +24,42 @@ export default function Feed({
   onNewPost: () => void;
   reloadKey: number;
 }) {
-  const [posts, setPosts] = useState<Post[] | null>(null);
-  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [loaded, setLoaded] = useState<{ token: string; viewerId: string; scope: "public" | "following"; requestKey: string; items: Post[]; next_offset: number | null } | null>(null);
+  const generation = useRef(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
+  const requestKey = JSON.stringify([token, viewerId, scope, attempt, reloadKey]);
+  const visible = loaded?.token === token && loaded.viewerId === viewerId ? loaded : null;
+  const posts = visible?.items ?? null;
+  const nextOffset = visible?.next_offset ?? null;
+  const pending = visible?.requestKey !== requestKey;
+  const displayedScope = visible?.scope ?? scope;
 
   useEffect(() => {
     let active = true;
-    setPosts(null);
+    generation.current += 1;
+    setLoadingMore(false);
     setError("");
     fetchFeed(token, scope)
-      .then((page) => { if (active) { setPosts(page.items); setNextOffset(page.next_offset); } })
+      .then((page) => { if (active) setLoaded({ ...page, token, viewerId, scope, requestKey }); })
       .catch((err) => active && setError(err instanceof Error ? err.message : "The feed could not be loaded."));
     return () => {
       active = false;
+      generation.current += 1;
     };
-  }, [token, scope, attempt, reloadKey]);
+  }, [token, viewerId, scope, requestKey]);
 
   async function loadMore() {
-    if (nextOffset === null) return;
+    if (nextOffset === null || pending || loadingMore) return;
+    const started = generation.current;
     setLoadingMore(true);
     try {
       const page = await fetchFeed(token, scope, nextOffset);
-      setPosts(previous => [...(previous ?? []), ...page.items]); setNextOffset(page.next_offset);
-    } catch (err) { setError(err instanceof Error ? err.message : "Could not load more posts."); }
-    finally { setLoadingMore(false); }
+      if (started !== generation.current) return;
+      setLoaded(previous => previous?.requestKey === requestKey ? { ...previous, items: [...previous.items, ...page.items], next_offset: page.next_offset } : previous);
+    } catch (err) { if (started === generation.current) setError(err instanceof Error ? err.message : "Could not load more posts."); }
+    finally { if (started === generation.current) setLoadingMore(false); }
   }
 
   return (
@@ -61,20 +72,21 @@ export default function Feed({
       </section>
       <div className="feed-tabs" aria-label="Feed selection">
         <button
-          aria-pressed={scope === "following"}
-          className={scope === "following" ? "active" : ""}
+          aria-pressed={displayedScope === "following"}
+          className={displayedScope === "following" ? "active" : ""}
           onClick={() => onScope("following")}
         >
           Following
         </button>
         <button
-          aria-pressed={scope === "public"}
-          className={scope === "public" ? "active" : ""}
+          aria-pressed={displayedScope === "public"}
+          className={displayedScope === "public" ? "active" : ""}
           onClick={() => onScope("public")}
         >
           Public
         </button>
       </div>
+      <div aria-busy={pending && !error} aria-label="Feed posts">
       {error ? (
         <section className="empty">
           <h2>The feed is unavailable.</h2>
@@ -84,7 +96,7 @@ export default function Feed({
           </button>
         </section>
       ) : posts === null ? (
-        <p role="status">Loading the feed…</p>
+        <Skeleton label="Loading the feed…" variant="posts" />
       ) : (
         <PostList
           token={token}
@@ -97,24 +109,25 @@ export default function Feed({
           empty={
             <section className="empty">
               <h2>
-                {scope === "following" ? "Your following feed is empty." : "No ratings yet."}
+                {displayedScope === "following" ? "Your following feed is empty." : "No ratings yet."}
               </h2>
               <p>
-                {scope === "following"
+                {displayedScope === "following"
                   ? "Follow other viewers to see their reviews here, or read the public feed."
                   : "Be the first to rate a movie or show."}
               </p>
               <button
                 className="primary"
-                onClick={() => (scope === "following" ? onScope("public") : onNewPost())}
+                onClick={() => (displayedScope === "following" ? onScope("public") : onNewPost())}
               >
-                {scope === "following" ? "Explore the public feed →" : "Write the first post →"}
+                {displayedScope === "following" ? "Explore the public feed →" : "Write the first post →"}
               </button>
             </section>
           }
         />
       )}
-      {posts && nextOffset !== null && <button className="secondary" disabled={loadingMore} onClick={() => void loadMore()}>Load more posts</button>}
+      {posts && nextOffset !== null && <button className="secondary" disabled={loadingMore || pending} onClick={() => void loadMore()}>Load more posts</button>}
+      </div>
     </>
   );
 }

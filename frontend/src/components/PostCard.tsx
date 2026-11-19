@@ -48,7 +48,8 @@ export default function PostCard({
             {post.title_name} <span>↗</span>
           </button>
           <span className="stars" aria-label={`${post.rating} out of 5 stars`}>
-            {post.rating.toFixed(1)} / 5
+            <span className="star-glyphs" aria-hidden="true">★★★★★<span style={{ width: `${post.rating / 5 * 100}%` }}>★★★★★</span></span>
+            <span className="rating-value">{post.rating.toFixed(1)} / 5</span>
           </span>
           {post.review ? (
             <p className="review-text">{post.review}</p>
