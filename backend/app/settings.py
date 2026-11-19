@@ -1,5 +1,6 @@
 """Runtime configuration. Secrets come from the environment, never from source."""
 
+from functools import lru_cache
 import os
 from dataclasses import dataclass
 
@@ -24,6 +25,7 @@ class Settings:
         return f"{self.issuer}/.well-known/jwks.json"
 
 
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
     origins = os.environ.get(
         "CORS_ORIGINS",

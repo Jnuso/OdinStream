@@ -1,5 +1,8 @@
 """API entry point for the Odin Stream backend."""
 
+from contextlib import asynccontextmanager
+import logging
+
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,14 +11,29 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.account_deletion import router as account_deletion_router
 from app.accounts import router as accounts_router
-from app.catalog import router as catalog_router, filtered_router as filtered_catalog_router
+from app.catalog import (
+    close_tmdb_client,
+    filtered_router as filtered_catalog_router,
+    router as catalog_router,
+)
+from app.db import close_pools
 from app.errors import APIError
 from app.library import router as library_router
 from app.recommendations import router as recommendations_router
-from app.social import router as social_router
 from app.settings import get_settings
+from app.social import router as social_router
 
-app = FastAPI(title="Odin Stream API")
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    yield
+    close_tmdb_client()
+    close_pools()
+
+
+app = FastAPI(title="Odin Stream API", lifespan=lifespan)
 settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
@@ -35,7 +53,12 @@ app.include_router(recommendations_router)
 @app.middleware("http")
 async def private_account_responses(request, call_next):
     response = await call_next(request)
-    if request.url.path == "/api/me" or request.url.path.startswith("/api/me/"):
+    raw_path = request.scope.get("path", "")
+    if (
+        raw_path == "/api/me"
+        or raw_path.startswith("/api/me/")
+        or request.headers.get("authorization")
+    ):
         response.headers["Cache-Control"] = "private, no-store"
     return response
 
@@ -60,6 +83,15 @@ def handle_api_error(_request, exc: APIError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": exc.error, "message": exc.message},
+    )
+
+
+@app.exception_handler(Exception)
+def handle_unexpected_error(_request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled application error", exc_info=exc)
+    return JSONResponse(
+        status_code=500,
+        content={"error": "internal_error", "message": "An unexpected error occurred."},
     )
 
 
