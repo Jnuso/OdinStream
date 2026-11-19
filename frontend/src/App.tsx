@@ -232,7 +232,7 @@ export default function App() {
           {page === "discover" ? (
             <Discover token={token} focus={focus} onFocusHandled={() => setFocus(null)} />
           ) : page === "library" ? (
-            <Library key={viewerId || "signed-out"} token={token} />
+            <Library key={viewerId || "signed-out"} token={token} onOpenTitle={openTitle} />
           ) : page === "account" ? (
             <Account
               session={session}
