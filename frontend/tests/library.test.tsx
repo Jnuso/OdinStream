@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { clearCatalogCache } from "../src/data/catalogCache";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import Library from "../src/components/Library";
@@ -6,7 +7,7 @@ import Library from "../src/components/Library";
 type Mark = { season_number: number; episode_number: number };
 type Episode = { episode_number: number; name: string };
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { clearCatalogCache(); cleanup(); vi.unstubAllGlobals(); });
 
 function fixture(options: { episodes: Episode[] | null; missingSeason?: boolean; missingTitle?: boolean; failDelete?: boolean; lastWatched?: Mark }) {
   let watched: Mark[] = [
@@ -103,7 +104,7 @@ describe("saved TV episode progress", () => {
     const checkbox = await screen.findByRole("checkbox", { name: "Episode 1 (E1) · saved progress, details unavailable" }) as HTMLInputElement;
     fireEvent.click(checkbox);
     expect((await screen.findByRole("alert")).textContent).toBe("Could not remove episode");
-    expect(checkbox.checked).toBe(true);
+    expect((screen.getByRole("checkbox", { name: "Episode 1 (E1) · saved progress, details unavailable" }) as HTMLInputElement).checked).toBe(true);
     expect(state.marks()).toEqual([
       { season_number: 1, episode_number: 1 },
       { season_number: 1, episode_number: 2 },

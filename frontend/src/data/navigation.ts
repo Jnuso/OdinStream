@@ -21,7 +21,7 @@ export function useNavigation() {
   const [path, query] = hash.slice(1).split("?");
   const [, section, profileId] = (path ?? "").split("/");
   const route: Navigation = {
-    page: sections[section] ?? "feed",
+    page: sections[section] ?? "discover",
     feed: new URLSearchParams(query ?? "").get("feed") === "public" ? "public" : "following",
     profileId: profileId === "me" || /^[0-9a-f-]{36}$/i.test(profileId ?? "") ? profileId : "me",
   };

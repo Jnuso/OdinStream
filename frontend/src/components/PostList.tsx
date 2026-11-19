@@ -12,6 +12,7 @@ export default function PostList({
   onOpenTitle,
   onEdit,
   onChanged,
+  showProfileLink = true,
 }: {
   token: string;
   posts: Post[];
@@ -21,6 +22,7 @@ export default function PostList({
   onOpenTitle: (mediaType: Post["media_type"], tmdbId: number) => void;
   onEdit: (post: Post) => void;
   onChanged: () => void;
+  showProfileLink?: boolean;
 }) {
   const [deleting, setDeleting] = useState<Post | null>(null);
   const [error, setError] = useState("");
@@ -51,6 +53,7 @@ export default function PostList({
             key={post.id}
             post={post}
             isOwn={post.author.id === viewerId}
+            showProfileLink={showProfileLink}
             onOpenProfile={onOpenProfile}
             onOpenTitle={onOpenTitle}
             onEdit={onEdit}

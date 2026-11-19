@@ -11,29 +11,36 @@ import {
   type MediaType,
   type Post,
   type Profile,
+  type TitleSummary,
 } from "./data/social";
 import Account from "./components/Account";
 import Setup from "./components/Setup";
+import { AccountStatus } from "./components/AccountLayout";
 import { api } from "./data/api";
 import Discover from "./components/Discover";
 import Feed from "./components/Feed";
 import Library from "./components/Library";
 import PostComposer from "./components/PostComposer";
 import ProfileScreen from "./components/Profile";
+import TitleDetails from "./components/TitleDetails";
+import NavIcon from "./components/NavIcon";
 import "./App.css";
+import "./SiteRefinements.css";
+import FollowRequests, { RequestBadge } from "./components/FollowRequests";
+import { useFollowRequests } from "./data/useFollowRequests";
 
 type Focus = { media_type: MediaType; id: number };
 
-function SidebarProfile({ me }: { me: Profile }) {
+function SidebarProfile({ me, onOpen, requestCount, hasMore }: { me: Profile; onOpen: () => void; requestCount: number; hasMore: boolean }) {
   return (
-    <span className="demo-account">
+    <button className="demo-account" onClick={onOpen} aria-label={`View your profile, ${me.display_name}`}>
       <span className={`avatar ${avatarColor(me.id)}`}>{initials(me.display_name)}</span>
       <span>
         <strong>{me.display_name}</strong>
         <small>@{me.handle}</small>
       </span>
-      <span className="online" />
-    </span>
+      <RequestBadge count={requestCount} hasMore={hasMore} />
+    </button>
   );
 }
 
@@ -41,17 +48,20 @@ export default function App() {
   const [setup, setSetup] = useState<{ id: string; status: "checking" | "needed" | "ready" | "error" } | null>(null);
   const [setupRetry, setSetupRetry] = useState(0);
   const [session, setSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(!supabase);
   const [recovery, setRecovery] = useState(false);
   const [authError, setAuthError] = useState<string | null>(authCallbackError);
   const [me, setMe] = useState<Profile | null>(null);
   const [suggested, setSuggested] = useState<Profile[]>([]);
   const [composer, setComposer] = useState<Post | "new" | null>(null);
+  const [reviewTitle, setReviewTitle] = useState<TitleSummary | null>(null);
   const [notice, setNotice] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [focus, setFocus] = useState<Focus | null>(null);
   const { page, feed, profileId, navigate } = useNavigation();
   const token = session?.access_token ?? null;
   const viewerId = session?.user.id ?? "";
+  const viewingOwnProfile = page === "profile" && (profileId === "me" || profileId === viewerId);
 
   useEffect(() => {
     if (!supabase) return;
@@ -61,6 +71,7 @@ export default function App() {
     }
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
+      setAuthReady(true);
       if (event === "PASSWORD_RECOVERY") {
         setRecovery(true);
         window.location.hash = "#/account";
@@ -104,11 +115,12 @@ export default function App() {
   const openProfile = (id: string) => navigate({ page: "profile", feed, profileId: id });
   const openTitle = (mediaType: MediaType, id: number) => {
     setFocus({ media_type: mediaType, id });
-    navigate({ page: "discover", feed, profileId });
   };
   const refresh = () => setReloadKey((value) => value + 1);
+  const requests = useFollowRequests(token, viewerId, !!token && setup?.id === viewerId && setup.status === "ready", reloadKey, refresh);
 
   function startComposer() {
+    setReviewTitle(null);
     if (!token) {
       navigate({ page: "account", feed, profileId });
       setNotice("Sign in to rate movies and shows.");
@@ -137,11 +149,13 @@ export default function App() {
     </section>
   );
 
+  if (!authReady) return <AccountStatus />;
+
   if (token && !recovery) {
-    if (setup?.id !== viewerId || setup.status === "checking") return <main><p role="status">Checking account setup…</p></main>;
-    if (setup.status === "error") return <main><p role="alert">Could not check account setup. Please try again.</p>
-      <button onClick={() => setSetupRetry(value => value + 1)}>Retry</button>
-      <button onClick={() => { void supabase?.auth.signOut(); }}>Sign out</button></main>;
+    if (setup?.id !== viewerId || setup.status === "checking") return <AccountStatus />;
+    if (setup.status === "error") return <AccountStatus error
+      onRetry={() => setSetupRetry(value => value + 1)}
+      onSignOut={() => { void supabase?.auth.signOut(); }} />;
     if (setup.status === "needed") return <Setup token={token} onComplete={() => setSetup({ id: viewerId, status: "ready" })}
       onSignOut={() => { void supabase?.auth.signOut(); }} />;
   }
@@ -161,10 +175,10 @@ export default function App() {
       <aside className="sidebar">
         <a
           className="brand"
-          href="#/feed"
+          href="#/discover"
           onClick={(event) => {
             event.preventDefault();
-            setPage("feed");
+            setPage("discover");
           }}
         >
           <span className="brand-mark" aria-hidden="true">
@@ -184,29 +198,29 @@ export default function App() {
         <div className="nav-label">Navigation</div>
         <nav aria-label="Main navigation">
           <button className={`nav-item ${page === "discover" ? "active" : ""}`} aria-current={page === "discover" ? "page" : undefined} onClick={() => setPage("discover")}>
-            <span aria-hidden="true">⌕</span>Discover
+            <NavIcon name="discover" />Discover
           </button>
           <button className={`nav-item ${page === "library" ? "active" : ""}`} aria-current={page === "library" ? "page" : undefined} onClick={() => setPage("library")}>
-            <span aria-hidden="true">▤</span>My Library
+            <NavIcon name="library" />My Library
           </button>
           <button className={`nav-item ${page === "feed" ? "active" : ""}`} aria-current={page === "feed" ? "page" : undefined} onClick={() => setPage("feed")}>
-            <span aria-hidden="true">◉</span>Feed
+            <NavIcon name="feed" />Feed
           </button>
           <button
-            className={`nav-item ${page === "profile" ? "active" : ""}`}
-            aria-current={page === "profile" ? "page" : undefined}
+            className={`nav-item ${viewingOwnProfile ? "active" : ""}`}
+            aria-current={viewingOwnProfile ? "page" : undefined}
             onClick={() => (token ? openProfile("me") : setPage("account"))}
           >
-            <span aria-hidden="true">◎</span>My Profile
+            <NavIcon name="profile" />My Profile <RequestBadge count={requests.items.length} hasMore={requests.hasMore} />
           </button>
           <button className={`nav-item ${page === "account" ? "active" : ""}`} aria-current={page === "account" ? "page" : undefined} onClick={() => setPage("account")}>
-            <span aria-hidden="true">○</span>Account
+            <NavIcon name="account" />Account
           </button>
         </nav>
         <button className="primary new-post" onClick={startComposer}>
-          <span>+</span> New post
+          <NavIcon name="plus" /> New post
         </button>
-        {me ? <SidebarProfile me={me} /> : <p className="rail-footnote">Not signed in</p>}
+        {me ? <SidebarProfile me={me} onOpen={() => openProfile("me")} requestCount={requests.items.length} hasMore={requests.hasMore} /> : <p className="rail-footnote">Not signed in</p>}
       </aside>
       <div className="workspace">
         <header className="topbar">
@@ -215,14 +229,18 @@ export default function App() {
           </span>
           <div>
             <span className="country">United States</span>
-            {me && <span className={`avatar ${avatarColor(me.id)}`}>{initials(me.display_name)}</span>}
+            {token && <button className="mobile-account-shortcut" aria-label="Open account settings" onClick={() => setPage("account")}><NavIcon name="account" /></button>}
+            <button className="account-shortcut" aria-label={token ? "View your profile" : "Sign in"} onClick={() => token ? openProfile("me") : setPage("account")}>
+              {me ? <span className={`avatar ${avatarColor(me.id)}`}>{initials(me.display_name)}</span> : "Sign in"}
+              <RequestBadge count={requests.items.length} hasMore={requests.hasMore} />
+            </button>
           </div>
         </header>
         <main id="main" tabIndex={-1}>
           {page === "discover" ? (
-            <Discover token={token} focus={focus} onFocusHandled={() => setFocus(null)} />
+            <Discover token={token} onOpenTitle={openTitle} />
           ) : page === "library" ? (
-            <Library key={viewerId || "signed-out"} token={token} />
+            <Library key={viewerId || "signed-out"} token={token} onOpenTitle={openTitle} />
           ) : page === "account" ? (
             <Account
               session={session}
@@ -292,6 +310,7 @@ export default function App() {
               onEdit={setComposer}
               onChanged={refresh}
               onOpenAccount={() => setPage("account")}
+              followRequests={<FollowRequests model={requests} onOpenProfile={openProfile} />}
             />
           ) : (
             signInPrompt("your profile")
@@ -304,10 +323,18 @@ export default function App() {
           </footer>
         </main>
       </div>
+      <nav className="mobile-nav" aria-label="Mobile navigation">
+        {([ ["discover", "Discover"], ["library", "Library"], ["feed", "Feed"], ["profile", "Profile"] ] as const).map(([target, label]) => (
+          <button key={target} aria-current={(target === "profile" ? viewingOwnProfile : page === target) ? "page" : undefined} onClick={() => target === "profile" ? (token ? openProfile("me") : setPage("account")) : setPage(target)}><NavIcon name={target} />{target === "profile" && <RequestBadge count={requests.items.length} hasMore={requests.hasMore} />}<span>{label}</span></button>
+        ))}
+        <button onClick={startComposer}><NavIcon name="plus" /><span>New post</span></button>
+      </nav>
+      {focus && <TitleDetails key={`${focus.media_type}:${focus.id}`} selection={focus} token={token} viewerId={viewerId} reloadKey={reloadKey} onClose={() => setFocus(null)} onReview={title => { setReviewTitle(title); setComposer("new"); }} onOpenProfile={openProfile} onEdit={setComposer} onOpenTitle={openTitle} />}
       {composer && token && (
         <PostComposer
           token={token}
           post={composer === "new" ? undefined : composer}
+          initialTitle={reviewTitle}
           onClose={() => setComposer(null)}
           onSaved={(message) => {
             setComposer(null);

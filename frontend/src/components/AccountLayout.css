@@ -1,0 +1,238 @@
+.onboarding-page {
+  min-height: 100dvh;
+  max-width: none;
+  padding: 48px 24px 64px;
+}
+
+.onboarding-content {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+.onboarding-brand {
+  margin-bottom: 32px;
+  font-size: 23px;
+  font-weight: 700;
+  letter-spacing: -0.8px;
+}
+
+.onboarding-brand span {
+  color: #d5eaa2;
+  font-weight: 400;
+}
+
+.onboarding-panel {
+  padding: 36px;
+  background: #171c18;
+  border: 1px solid #ffffff12;
+  border-radius: 16px;
+}
+
+.setup-heading {
+  margin-bottom: 32px;
+}
+
+.setup-heading h1,
+.account-status h1 {
+  margin: 0 0 12px;
+  font-size: clamp(26px, 4vw, 32px);
+  line-height: 1.2;
+  letter-spacing: -0.8px;
+}
+
+.setup-heading p,
+.account-status p {
+  color: #b1bca8;
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.setup-form {
+  display: grid;
+  gap: 30px;
+}
+
+.setup-field {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.setup-form label,
+.setup-form legend {
+  font-size: 15px;
+}
+
+.setup-form legend {
+  padding: 0;
+  margin-bottom: 14px;
+  font-weight: 600;
+}
+
+.setup-annotation {
+  color: #a5b098;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.setup-field > input {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid #ffffff26;
+  border-radius: 7px;
+  background: #101510;
+  color: #efeee8;
+  outline-offset: 3px;
+}
+
+.setup-hint {
+  color: #a5b098;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.setup-form fieldset {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.setup-privacy-options {
+  display: grid;
+  gap: 12px;
+}
+
+.setup-privacy-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #ffffff1f;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.setup-privacy-option:has(input:checked) {
+  border-color: #d5eaa280;
+  background: #d5eaa208;
+}
+
+.setup-privacy-option strong,
+.setup-privacy-option small {
+  display: block;
+}
+
+.setup-privacy-option strong {
+  margin-bottom: 5px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.setup-privacy-option small {
+  color: #b1bca8;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.setup-form input[type="radio"],
+.setup-form input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  accent-color: #d5eaa2;
+  outline-offset: 3px;
+}
+
+.setup-preferences {
+  display: grid;
+  gap: 24px;
+  padding-top: 28px;
+  border-top: 1px solid #ffffff12;
+}
+
+.setup-preferences h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.setup-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 24px;
+}
+
+.setup-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.setup-choice input[type="checkbox"] {
+  margin-top: 0;
+}
+
+.setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.setup-actions button {
+  min-height: 46px;
+}
+
+.setup-form .form-error {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.account-status {
+  padding: 28px 0;
+  text-align: center;
+}
+
+.account-status-indicator {
+  display: block;
+  width: 36px;
+  height: 36px;
+  margin: 0 auto 24px;
+  border: 3px solid #d5eaa226;
+  border-top-color: #d5eaa2;
+  border-radius: 50%;
+  animation: account-status-spin 0.9s linear infinite;
+}
+
+.account-status-indicator.is-error {
+  border: 1px solid #ffc2ac66;
+  color: #ffc2ac;
+  font-size: 23px;
+  line-height: 32px;
+  animation: none;
+}
+
+@keyframes account-status-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 480px) {
+  .onboarding-page { padding: 28px 16px 40px; }
+  .onboarding-brand { margin-bottom: 24px; }
+  .onboarding-panel { padding: 24px 20px; }
+  .setup-choices { gap: 8px 14px; }
+  .setup-actions .primary { flex: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-status-indicator { animation: none; }
+}

@@ -8,6 +8,7 @@ export default function PostCard({
   onOpenTitle,
   onEdit,
   onDelete,
+  showProfileLink = true,
 }: {
   post: Post;
   isOwn: boolean;
@@ -15,6 +16,7 @@ export default function PostCard({
   onOpenTitle: (mediaType: Post["media_type"], tmdbId: number) => void;
   onEdit: (post: Post) => void;
   onDelete: (post: Post) => void;
+  showProfileLink?: boolean;
 }) {
   const year = formatYear(post.release_date);
   return (
@@ -48,7 +50,8 @@ export default function PostCard({
             {post.title_name} <span>↗</span>
           </button>
           <span className="stars" aria-label={`${post.rating} out of 5 stars`}>
-            {post.rating.toFixed(1)} / 5
+            <span className="star-glyphs" aria-hidden="true">★★★★★<span style={{ width: `${post.rating / 5 * 100}%` }}>★★★★★</span></span>
+            <span className="rating-value">{post.rating.toFixed(1)} / 5</span>
           </span>
           {post.review ? (
             <p className="review-text">{post.review}</p>
@@ -57,7 +60,7 @@ export default function PostCard({
           )}
         </div>
       </div>
-      <div className="post-footer">
+      {(isOwn || showProfileLink) && <div className="post-footer">
         {isOwn ? (
           <div>
             <button onClick={() => onEdit(post)}>Edit post</button>
@@ -68,7 +71,7 @@ export default function PostCard({
             View profile <span>→</span>
           </button>
         )}
-      </div>
+      </div>}
     </article>
   );
 }

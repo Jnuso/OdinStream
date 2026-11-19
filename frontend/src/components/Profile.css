@@ -1,0 +1,45 @@
+.profile-page { max-width: 1120px; margin: 0 auto; }
+.profile-toolbar { display: flex; justify-content: flex-end; margin-bottom: 18px; }
+.profile-toolbar button { padding: 10px 18px; }
+.profile-page .profile-header { display: flex; align-items: center; gap: 24px; padding: 28px; margin-bottom: 36px; border: 1px solid #ffffff12; border-radius: 14px; background: #181d18; }
+.profile-page .large-avatar { width: 88px; height: 88px; flex-shrink: 0; font-size: 30px; }
+.profile-page .profile-identity { min-width: 0; }
+.profile-page .profile-identity h1 { font-size: clamp(23px, 3vw, 30px); line-height: 1.2; overflow-wrap: anywhere; margin: 7px 0; }
+.profile-page .profile-identity > p { color: #bac4ad; font-size: 14px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 48ch; margin-top: 10px; }
+.profile-page .profile-identity .eyebrow { overflow-wrap: anywhere; }
+.profile-page .profile-stats { display: flex; gap: 24px; margin: 0; flex-shrink: 0; }
+.profile-page .profile-stats > span { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; }
+.profile-page .profile-stats strong { margin: 0; font-size: 21px; }
+.profile-page .social-layout { display: block; }
+.profile-page .feed-column { min-width: 0; width: 100%; }
+.profile-page .section-heading { margin-bottom: 20px; }
+.profile-page .post-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 20px; }
+.profile-page .post-card { min-width: 0; margin: 0; }
+.profile-page .post-content { grid-template-columns: 76px minmax(0, 1fr); gap: 16px; }
+.profile-page .post-review { min-width: 0; overflow-wrap: anywhere; }
+.profile-page .empty { padding: 48px 24px; border-radius: 14px; }
+.profile-editor { padding: 6px; }
+.profile-editor h2 { margin: 0 32px 12px 0; }
+.profile-editor-intro { font-size: 14px; line-height: 1.6; margin-bottom: 24px; }
+.profile-editor .account-form { display: flex; flex-direction: column; max-width: none; gap: 10px; }
+.profile-editor .account-form + .account-form { margin-top: 28px; padding-top: 24px; border-top: 1px solid #ffffff16; }
+.profile-editor label { font-size: 14px; margin-top: 8px; }
+.profile-editor input, .profile-editor textarea, .profile-editor select { display: block; box-sizing: border-box; width: 100%; min-height: 46px; padding: 12px 14px; border: 1px solid #ffffff26; border-radius: 8px; background: #101510; color: #efeee8; font: inherit; }
+.profile-editor textarea { resize: vertical; min-height: 112px; line-height: 1.6; }
+.profile-editor .character-count { align-self: flex-end; color: #bac4ad; font-size: 12px; }
+.profile-editor .small { font-size: 13px; line-height: 1.65; }
+.profile-editor button { min-height: 44px; margin-top: 6px; }
+@media (max-width: 1050px) {
+  .profile-page .profile-header { flex-wrap: wrap; }
+  .profile-page .profile-stats { width: 100%; justify-content: space-around; padding-top: 20px; border-top: 1px solid #ffffff12; }
+  .profile-page .profile-header > button { width: 100%; }
+}
+@media (max-width: 640px) {
+  .profile-page .profile-header { gap: 16px; padding: 20px; margin-bottom: 28px; }
+  .profile-page .large-avatar { width: 64px; height: 64px; font-size: 24px; }
+  .profile-page .profile-identity h1 { font-size: 23px; }
+  .profile-page .profile-stats { gap: 12px; }
+  .profile-page .post-list { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .profile-page .post-content { grid-template-columns: 64px minmax(0, 1fr); gap: 14px; }
+  .profile-editor { padding: 0; }
+}
