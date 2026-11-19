@@ -15,12 +15,14 @@ from app.settings import Settings, get_settings
 class FakeStore:
     def __init__(self):
         self.rows = {}
-        self.progress = set()
+        self.progress = {}
+        self.counter = 0
 
-    def list(self, user_id, media_type, status):
-        return [row for owner, row in self.rows.values() if owner == user_id
+    def list(self, user_id, media_type, status, limit=None, offset=0):
+        rows = [row for owner, row in self.rows.values() if owner == user_id
                 and (media_type is None or row["media_type"] == media_type)
                 and (status is None or row["status"] == status)]
+        return rows[offset:offset + limit] if limit is not None else rows[offset:]
 
     def create(self, user_id, media_type, tmdb_id, status):
         if any(owner == user_id and row["media_type"] == media_type and row["tmdb_id"] == tmdb_id
@@ -44,19 +46,26 @@ class FakeStore:
     def delete(self, user_id, entry_id):
         if self.get(user_id, entry_id) is None:
             return None
-        self.progress = {item for item in self.progress if item[1] != entry_id}
         return self.rows.pop(entry_id)[1]
 
     def episodes(self, user_id, entry_id):
-        return [{"season_number": s, "episode_number": e} for owner, title, s, e in sorted(self.progress)
-                if owner == user_id and title == entry_id]
+        entry = self.get(user_id, entry_id)
+        rows = [(key, order) for key, order in self.progress.items() if key[0] == user_id and key[1] == entry["tmdb_id"]]
+        return [{"season_number": key[2], "episode_number": key[3]} for key, _ in sorted(rows, key=lambda x: x[1], reverse=True)]
 
-    def mark_episodes(self, user_id, entry_id, season, numbers):
-        self.progress.update((user_id, entry_id, season, number) for number in numbers)
+    def mark_episodes(self, user_id, entry_id, season, numbers, *, bulk=False):
+        tmdb_id = self.get(user_id, entry_id)["tmdb_id"]
+        for number in sorted(numbers):
+            key = (user_id, tmdb_id, season, number)
+            if bulk or key not in self.progress:
+                self.counter += 1
+                self.progress[key] = self.counter
 
     def unmark_episodes(self, user_id, entry_id, season, numbers=None):
-        self.progress = {item for item in self.progress if not (item[0] == user_id and item[1] == entry_id
-                         and item[2] == season and (numbers is None or item[3] in numbers))}
+        tmdb_id = self.get(user_id, entry_id)["tmdb_id"]
+        self.progress = {key: order for key, order in self.progress.items() if not (key[0] == user_id and key[1] == tmdb_id
+                         and key[2] == season and (numbers is None or key[3] in numbers))}
+
 
 
 class LibraryTest(unittest.TestCase):
@@ -99,7 +108,7 @@ class LibraryTest(unittest.TestCase):
     def test_unverified_or_invalid_titles_are_not_saved(self):
         headers = self.headers(self.user_a)
         body = {"media_type": "tv", "tmdb_id": 42, "status": "watchlist"}
-        for error, status in [(APIError(404, "title_not_found", "not found"), 422),
+        for error, status in [(APIError(404, "title_not_found", "not found"), 404),
                               (APIError(503, "catalog_unavailable", "offline"), 503)]:
             with patch("app.library.tmdb_get", side_effect=error):
                 self.assertEqual(self.client.post("/api/me/saved-titles", headers=headers, json=body).status_code, status)
@@ -160,6 +169,41 @@ class LibraryTest(unittest.TestCase):
                 [{"season_number": 1, "episode_number": 2}])
             self.assertEqual(self.client.get(base_b + "/episodes", headers=b).json()["items"],
                 [{"season_number": 1, "episode_number": 1}, {"season_number": 1, "episode_number": 2}])
+
+    def test_history_restored_and_last_watched_follows_mark_order(self):
+        headers = self.headers(self.user_a)
+        body = {"media_type": "tv", "tmdb_id": 99, "status": "watching"}
+        with patch("app.library.tmdb_get", return_value={"id": 99}):
+            first = self.client.post("/api/me/saved-titles", headers=headers, json=body).json()["id"]
+        base = f"/api/me/saved-titles/{first}"
+        season = {"season_number": 1, "episodes": [{"episode_number": n} for n in (1, 2, 3)]}
+        with patch("app.library.tmdb_get", return_value=season):
+            self.client.put(base + "/seasons/1/episodes/3", headers=headers)
+            self.client.put(base + "/seasons/1/episodes/1", headers=headers)
+        self.assertEqual(self.client.get(base + "/episodes", headers=headers).json()["last_watched"]["episode_number"], 1)
+        self.client.delete(base + "/seasons/1/episodes/1", headers=headers)
+        self.assertEqual(self.client.get(base + "/episodes", headers=headers).json()["last_watched"]["episode_number"], 3)
+        self.client.delete(base, headers=headers)
+        with patch("app.library.tmdb_get", return_value={"id": 99}):
+            second = self.client.post("/api/me/saved-titles", headers=headers, json=body).json()["id"]
+        self.assertEqual(self.client.get(f"/api/me/saved-titles/{second}/episodes", headers=headers).json()["items"],
+                         [{"season_number": 1, "episode_number": 3}])
+        with patch("app.library.tmdb_get", return_value=season):
+            self.client.put(f"/api/me/saved-titles/{second}/seasons/1/episodes", headers=headers)
+        self.assertEqual(self.client.get(f"/api/me/saved-titles/{second}/episodes", headers=headers).json()["last_watched"]["episode_number"], 3)
+
+    def test_library_pagination(self):
+        headers = self.headers(self.user_a)
+        for number in (1, 2, 3):
+            with patch("app.library.tmdb_get", return_value={"id": number}):
+                self.assertEqual(self.client.post("/api/me/saved-titles", headers=headers,
+                    json={"media_type": "movie", "tmdb_id": number, "status": "watchlist"}).status_code, 201)
+        first = self.client.get("/api/me/saved-titles?limit=2", headers=headers).json()
+        self.assertEqual(len(first["items"]), 2)
+        self.assertEqual(first["next_offset"], 2)
+        second = self.client.get("/api/me/saved-titles?limit=2&offset=2", headers=headers).json()
+        self.assertEqual(len(second["items"]), 1)
+        self.assertIsNone(second["next_offset"])
 
     def test_browser_cors_preflight(self):
         response = self.client.options("/api/me/saved-titles", headers={"Origin": "http://localhost:5173",

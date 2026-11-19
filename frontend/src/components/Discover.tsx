@@ -30,6 +30,10 @@ export default function Discover({
   onFocusHandled: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const [serviceFilter, setServiceFilter] = useState(false);
+  const [submittedQuery, setSubmittedQuery] = useState("");
+  const [resultPage, setResultPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
   const [items, setItems] = useState<Title[] | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,20 +47,29 @@ export default function Discover({
   const [recommendedBasis, setRecommendedBasis] = useState("");
   const [recommendedError, setRecommendedError] = useState("");
 
-  async function search(event: FormEvent) {
-    event.preventDefault();
-    if (!query.trim()) return;
-    setLoading(true);
-    setError("");
-    setItems(null);
+  async function loadSearch(text: string, page: number, filter: boolean) {
+    if (!text.trim()) return;
+    setLoading(true); setError(""); setItems(null);
     try {
-      const data = await api<{ items: Title[] }>(`/api/catalog/search?query=${encodeURIComponent(query.trim())}`);
-      setItems(data.items);
+      const path = filter ? "/api/me/catalog/search" : "/api/catalog/search";
+      const data = await api<{ items: Title[]; page: number; total_pages: number }>(
+        `${path}?query=${encodeURIComponent(text.trim())}&page=${page}`, filter ? token ?? undefined : undefined);
+      setItems(data.items); setSubmittedQuery(text.trim()); setResultPage(data.page); setTotalPages(data.total_pages);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Search failed.");
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
+  }
+
+  function search(event: FormEvent) {
+    event.preventDefault();
+    void loadSearch(query, 1, serviceFilter);
+  }
+
+  function toggleServiceFilter() {
+    if (!token && !serviceFilter) { setError("Sign in and select streaming services in Account to use this filter."); return; }
+    const next = !serviceFilter;
+    setServiceFilter(next); setError("");
+    if (submittedQuery) void loadSearch(submittedQuery, 1, next);
   }
 
   async function openTitle(mediaType: MediaType, id: number) {
@@ -105,6 +118,7 @@ export default function Discover({
 
   useEffect(() => {
     if (!token) {
+      setServiceFilter(false); setItems(null); setSubmittedQuery("");
       setRecommended(null);
       return;
     }
@@ -192,9 +206,13 @@ export default function Discover({
           </button>
         </div>
       </form>
+      <button type="button" className="secondary" aria-pressed={serviceFilter} disabled={loading} onClick={toggleServiceFilter}>
+        Filter by my streaming services: {serviceFilter ? "On" : "Off"}
+      </button>
+      {serviceFilter && <p className="muted small">Shows titles included with your selected services in the United States, when availability data is provided. Add services in Account.</p>}
       {error && <p role="alert" className="form-error">{error}</p>}
       {(loading || detailLoading) && <p role="status">Loading…</p>}
-      {items && items.length === 0 && <p className="muted">No titles found. Try another search.</p>}
+      {items && items.length === 0 && <p className="muted">{serviceFilter ? "No matching titles on this page. Try another results page or turn off the filter." : "No titles found. Try another search."}</p>}
       <div className="discover-results">
         {items?.map((item) => (
           <button
@@ -214,6 +232,12 @@ export default function Discover({
           </button>
         ))}
       </div>
+      {items && totalPages > 1 && <div aria-label="Search result pages">
+        <button className="secondary" disabled={loading || resultPage <= 1} onClick={() => void loadSearch(submittedQuery, resultPage - 1, serviceFilter)}>Previous page</button>
+        <span> Page {resultPage} of {totalPages} </span>
+        <button className="secondary" disabled={loading || resultPage >= Math.min(totalPages, 500)} onClick={() => void loadSearch(submittedQuery, resultPage + 1, serviceFilter)}>Next page</button>
+        {serviceFilter && <p className="muted small">Page numbers refer to all search results before filtering.</p>}
+      </div>}
       <p className="discover-attribution">
         Movie and TV data provided by{" "}
         <a href="https://www.themoviedb.org/" target="_blank" rel="noreferrer">TMDB</a>. Watch availability

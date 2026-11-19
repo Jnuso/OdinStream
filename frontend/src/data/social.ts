@@ -25,6 +25,7 @@ export type Profile = {
   follower_count: number;
   following_count: number;
   viewer_follows: boolean;
+  visibility: "public" | "private";
 };
 
 export type TitleSummary = {
@@ -51,9 +52,8 @@ export function avatarColor(id: string) {
   return avatarColors[hash % avatarColors.length];
 }
 
-export async function fetchFeed(token: string, scope: "public" | "following", offset = 0): Promise<Post[]> {
-  const data = await api<{ items: Post[] }>(`/api/feed?scope=${scope}&limit=30&offset=${offset}`, token);
-  return data.items;
+export async function fetchFeed(token: string, scope: "public" | "following", offset = 0): Promise<{ items: Post[]; next_offset: number | null }> {
+  return api<{ items: Post[]; next_offset: number | null }>(`/api/feed?scope=${scope}&limit=30&offset=${offset}`, token);
 }
 
 export async function fetchProfile(token: string, profileId: string): Promise<Profile> {

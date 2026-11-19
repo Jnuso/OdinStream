@@ -57,12 +57,12 @@ class PostgresLibraryStore:
         except psycopg.Error as exc:
             raise APIError(503, "library_unavailable", "Your library is unavailable right now. Try again.") from exc
 
-    def list(self, user_id: str, media_type: str | None, status: str | None):
+    def list(self, user_id: str, media_type: str | None, status: str | None, limit: int | None = None, offset: int = 0):
         return self.run(user_id, f"""select {COLUMNS} from public.saved_titles
             where user_id = %s and (%s::text is null or media_type = %s)
               and (%s::text is null or status = %s)
-            order by created_at desc, id desc""",
-            (user_id, media_type, media_type, status, status), many=True)
+            order by created_at desc, id desc limit %s offset %s""",
+            (user_id, media_type, media_type, status, status, limit, offset), many=True)
 
     def create(self, user_id: str, media_type: str, tmdb_id: int, status: str):
         return self.run(user_id, f"""insert into public.saved_titles (user_id, media_type, tmdb_id, status)
@@ -81,22 +81,30 @@ class PostgresLibraryStore:
                         (user_id, entry_id))
 
     def episodes(self, user_id: str, entry_id: UUID):
-        return self.run(user_id, """select season_number, episode_number from public.watched_episodes
-            where user_id = %s and saved_title_id = %s order by season_number, episode_number""",
+        return self.run(user_id, """select w.season_number, w.episode_number, w.watch_order
+            from public.watched_episodes w join public.saved_titles s
+              on s.user_id = w.user_id and s.tmdb_id = w.tmdb_id and s.media_type = 'tv'
+            where s.user_id = %s and s.id = %s
+            order by w.watch_order desc, w.season_number desc, w.episode_number desc""",
             (user_id, entry_id), many=True)
 
-    def mark_episodes(self, user_id: str, entry_id: UUID, season: int, numbers: list[int]):
-        return self.run(user_id, """insert into public.watched_episodes
-            (user_id, saved_title_id, season_number, episode_number)
-            select %s, %s, %s, n from unnest(%s::integer[]) as n
-            on conflict do nothing returning episode_number""",
-            (user_id, entry_id, season, numbers), many=True)
+    def mark_episodes(self, user_id: str, entry_id: UUID, season: int, numbers: list[int], *, bulk: bool = False):
+        conflict = "do update set watched_at = excluded.watched_at, watch_order = excluded.watch_order" if bulk else "do nothing"
+        return self.run(user_id, f"""insert into public.watched_episodes
+            (user_id, tmdb_id, season_number, episode_number, watched_at, watch_order)
+            select s.user_id, s.tmdb_id, %s, n, statement_timestamp(), nextval('public.watched_episode_order_seq')
+            from public.saved_titles s cross join unnest(%s::integer[]) as n
+            where s.user_id = %s and s.id = %s and s.media_type = 'tv' order by n
+            on conflict (user_id, tmdb_id, season_number, episode_number) {conflict} returning episode_number""",
+            (season, numbers, user_id, entry_id), many=True)
 
     def unmark_episodes(self, user_id: str, entry_id: UUID, season: int, numbers: list[int] | None = None):
-        return self.run(user_id, """delete from public.watched_episodes
-            where user_id = %s and saved_title_id = %s and season_number = %s
-            and (%s::integer[] is null or episode_number = any(%s::integer[])) returning episode_number""",
+        return self.run(user_id, """delete from public.watched_episodes w using public.saved_titles s
+            where s.user_id = %s and s.id = %s and s.media_type = 'tv'
+            and w.user_id = s.user_id and w.tmdb_id = s.tmdb_id and w.season_number = %s
+            and (%s::integer[] is null or w.episode_number = any(%s::integer[])) returning w.episode_number""",
             (user_id, entry_id, season, numbers, numbers), many=True)
+
 
 
 def library_store(settings: Settings = Depends(get_settings)) -> PostgresLibraryStore:
@@ -136,7 +144,9 @@ def season_numbers(tmdb_id: int, season: int) -> list[int]:
 def list_episodes(entry_id: UUID, user: AuthenticatedUser = Depends(current_user),
                   store: PostgresLibraryStore = Depends(library_store)):
     tv_entry(store, user.id, entry_id)
-    return {"items": store.episodes(user.id, entry_id)}
+    rows = store.episodes(user.id, entry_id)
+    items = [{"season_number": row["season_number"], "episode_number": row["episode_number"]} for row in rows]
+    return {"items": sorted(items, key=lambda item: (item["season_number"], item["episode_number"])), "last_watched": items[0] if items else None}
 
 
 @router.put("/{entry_id}/seasons/{season}/episodes/{episode}", status_code=204)
@@ -170,7 +180,7 @@ def mark_season(entry_id: UUID, season: int, user: AuthenticatedUser = Depends(c
     numbers = season_numbers(entry["tmdb_id"], season)
     if not numbers:
         raise APIError(422, "empty_season", "No episode information is available for this season.")
-    store.mark_episodes(user.id, entry_id, season, numbers)
+    store.mark_episodes(user.id, entry_id, season, numbers, bulk=True)
     return Response(status_code=204)
 
 
@@ -186,8 +196,10 @@ def unmark_season(entry_id: UUID, season: int, user: AuthenticatedUser = Depends
 
 @router.get("")
 def list_titles(media_type: MediaType | None = Query(default=None), status: Status | None = Query(default=None),
+                limit: int = Query(default=20, ge=1, le=50), offset: int = Query(default=0, ge=0),
                 user: AuthenticatedUser = Depends(current_user), store: PostgresLibraryStore = Depends(library_store)):
-    return {"items": store.list(user.id, media_type, status)}
+    rows = store.list(user.id, media_type, status, limit + 1, offset)
+    return {"items": rows[:limit], "next_offset": offset + limit if len(rows) > limit else None}
 
 
 @router.post("", status_code=201)
@@ -198,7 +210,7 @@ def create_title(body: CreateTitle, user: AuthenticatedUser = Depends(current_us
         title = tmdb_get(f"/{body.media_type}/{body.tmdb_id}")
     except APIError as exc:
         if exc.status_code == 404:
-            raise APIError(422, "invalid_title", "This title does not exist for the selected media type.") from exc
+            raise APIError(404, "title_not_found", "This title does not exist for the selected media type.") from exc
         raise
     if title.get("id") != body.tmdb_id:
         raise APIError(502, "catalog_upstream_error", "The title could not be verified. Try again.")

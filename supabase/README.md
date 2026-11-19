@@ -18,7 +18,11 @@ Tests run inside a transaction and roll back their changes. `supabase db reset` 
 Before merging the first migration, a repository administrator should:
 
 1. Confirm the intended target is the OdinStream development project and Supabase's own GitHub automatic deployment is disabled for that database.
-2. In GitHub repository settings, create the `supabase-development` environment. Configure environment secrets `SUPABASE_ACCESS_TOKEN` (an appropriately scoped Supabase personal access token) and `SUPABASE_DB_PASSWORD` (the development database password), and environment variable `SUPABASE_PROJECT_REF` (the development project reference). Enter secrets directly in GitHub, not in chat or repository files.
+2. In GitHub repository settings, create the `supabase-development` environment. Configure the environment secret `SUPABASE_DB_URL` with the development database session-pooler URL, including the migration administrator credentials. Enter secrets directly in GitHub, not in chat or repository files.
 3. Review the migration and verify the PR's database tests pass. Merging this PR to `main` triggers a real development database deployment; check the Actions run afterward. Missing configuration fails the deployment rather than applying the migration.
 
 The connection password used by the migration CLI is an administrative credential and must stay separate from the least-privileged role planned for the FastAPI application. Database CI exercises the backend role's row-level policies, but does not verify API authentication, live TMDB verification, or the security of the configured runtime login.
+
+## Profile privacy
+
+New profiles are private and hidden from other users until required setup is completed; existing profiles keep their current visibility. Private profiles expose posts only to the owner and approved followers; the public feed never includes private posts. A follow of a private profile creates a request. The owner can approve or decline it, and either participant can remove the relationship. Switching a public profile to private keeps existing followers. Pending requests are automatically approved when the profile becomes public. The frontend still needs controls for visibility and request management.

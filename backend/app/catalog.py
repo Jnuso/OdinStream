@@ -2,16 +2,26 @@
 
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+
+from app.accounts import current_user, preference_store
+from app.auth import AuthenticatedUser
+from app.preferences import PreferenceStore
 
 from app.errors import APIError
 
 router = APIRouter(prefix="/api/catalog", tags=["catalog"])
+filtered_router = APIRouter(prefix="/api/me/catalog", tags=["catalog"])
+
+SERVICE_IDS = {"Netflix": {8}, "Hulu": {15}, "Disney+": {337}, "Apple TV+": {350}, "Max": {384, 1899}}
+SERVICE_NAMES = {"Netflix": {"netflix"}, "Hulu": {"hulu"}, "Disney+": {"disney plus", "disney+"},
+                 "Apple TV+": {"apple tv plus", "apple tv+"}, "Max": {"max", "hbo max"}}
 TMDB_BASE = "https://api.themoviedb.org/3"
 MediaType = Literal["movie", "tv"]
 
@@ -63,6 +73,33 @@ def search(query: str = Query(min_length=1, max_length=200), page: int = Query(d
         "page": data.get("page", page),
         "total_pages": data.get("total_pages", 0),
     }
+
+
+@filtered_router.get("/search")
+def search_available(query: str = Query(min_length=1, max_length=200), page: int = Query(default=1, ge=1, le=500),
+                     user: AuthenticatedUser = Depends(current_user),
+                     preferences: PreferenceStore = Depends(preference_store)) -> dict:
+    selected = preferences.get(user.id)["streaming_services"]
+    if not selected:
+        raise APIError(422, "no_streaming_services", "Choose streaming services in Account before filtering.")
+    data = search(query, page)
+    def available(item: dict) -> bool:
+        providers = tmdb_get(f"/{item['media_type']}/{item['id']}/watch/providers")
+        region = providers.get("results", {}).get("US", {})
+        for provider in region.get("flatrate", []):
+            if not isinstance(provider, dict):
+                continue
+            provider_id = provider.get("provider_id")
+            name = str(provider.get("provider_name") or "").casefold().strip()
+            if any(provider_id in SERVICE_IDS.get(service, set()) or name in SERVICE_NAMES.get(service, set()) for service in selected):
+                return True
+        return False
+    items = data["items"]
+    # TMDB multi-search pages contain at most 20 results; limit concurrent lookups.
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        matches = list(pool.map(available, items))
+    return {**data, "items": [item for item, match in zip(items, matches) if match],
+            "availability_region": "US", "filtered_by_services": True}
 
 
 @router.get("/{media_type}/{tmdb_id}")

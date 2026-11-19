@@ -24,6 +24,8 @@ export default function Feed({
   reloadKey: number;
 }) {
   const [posts, setPosts] = useState<Post[] | null>(null);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
 
@@ -32,12 +34,22 @@ export default function Feed({
     setPosts(null);
     setError("");
     fetchFeed(token, scope)
-      .then((items) => active && setPosts(items))
+      .then((page) => { if (active) { setPosts(page.items); setNextOffset(page.next_offset); } })
       .catch((err) => active && setError(err instanceof Error ? err.message : "The feed could not be loaded."));
     return () => {
       active = false;
     };
   }, [token, scope, attempt, reloadKey]);
+
+  async function loadMore() {
+    if (nextOffset === null) return;
+    setLoadingMore(true);
+    try {
+      const page = await fetchFeed(token, scope, nextOffset);
+      setPosts(previous => [...(previous ?? []), ...page.items]); setNextOffset(page.next_offset);
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not load more posts."); }
+    finally { setLoadingMore(false); }
+  }
 
   return (
     <>
@@ -102,6 +114,7 @@ export default function Feed({
           }
         />
       )}
+      {posts && nextOffset !== null && <button className="secondary" disabled={loadingMore} onClick={() => void loadMore()}>Load more posts</button>}
     </>
   );
 }

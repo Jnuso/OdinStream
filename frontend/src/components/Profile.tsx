@@ -10,6 +10,7 @@ import {
   type Profile as ProfileData,
 } from "../data/social";
 import PostList from "./PostList";
+import { api } from "../data/api";
 
 export default function Profile({
   token,
@@ -168,6 +169,10 @@ function ProfileSettings({
   onSaved: () => void;
   onOpenAccount: () => void;
 }) {
+  const [visibility, setVisibility] = useState(profile.visibility);
+  const [privacyMessage, setPrivacyMessage] = useState("");
+  const [privacyError, setPrivacyError] = useState("");
+  const [privacySaving, setPrivacySaving] = useState(false);
   const [displayName, setDisplayName] = useState(profile.display_name);
   const [handle, setHandle] = useState(profile.handle);
   const [bio, setBio] = useState(profile.bio);
@@ -194,6 +199,23 @@ function ProfileSettings({
   return (
     <section className="rail-card profile-settings">
       <h2>Profile settings</h2>
+      <form className="account-form" onSubmit={async (event) => {
+        event.preventDefault(); setPrivacySaving(true); setPrivacyError(""); setPrivacyMessage("");
+        try {
+          await api("/api/me/profile/visibility", token, { method: "PATCH", body: JSON.stringify({ visibility }) });
+          setPrivacyMessage("Privacy saved."); onSaved();
+        } catch (err) { setPrivacyError(err instanceof Error ? err.message : "Could not update privacy."); }
+        finally { setPrivacySaving(false); }
+      }}>
+        <label htmlFor="profile-visibility">Profile privacy</label>
+        <select id="profile-visibility" value={visibility} onChange={event => setVisibility(event.target.value as "public" | "private")}>
+          <option value="private">Private</option><option value="public">Public</option>
+        </select>
+        <p className="muted small">Making your profile public automatically approves pending follow requests.</p>
+        {privacyError && <p className="form-error" role="alert">{privacyError}</p>}
+        {privacyMessage && <p role="status">{privacyMessage}</p>}
+        <button type="submit" className="secondary" disabled={privacySaving}>Save privacy</button>
+      </form>
       <form onSubmit={submit} className="account-form">
         <label htmlFor="profile-name">Display name</label>
         <input
@@ -209,9 +231,9 @@ function ProfileSettings({
           value={handle}
           maxLength={30}
           required
-          pattern="[a-z0-9_.]{3,30}"
-          title="3-30 lowercase letters, numbers, dots or underscores"
-          onChange={(event) => setHandle(event.target.value.toLowerCase())}
+          pattern="[A-Za-z0-9_.]{3,30}"
+          title="3-30 letters, numbers, dots or underscores"
+          onChange={(event) => setHandle(event.target.value)}
         />
         <label htmlFor="profile-bio">Bio</label>
         <textarea

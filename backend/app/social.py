@@ -9,7 +9,7 @@ from uuid import UUID
 import psycopg
 from fastapi import APIRouter, Depends, Query, Response
 from psycopg.rows import dict_row
-from pydantic import BaseModel, ConfigDict, Field, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.accounts import current_user
 from app.auth import AuthenticatedUser
@@ -19,23 +19,36 @@ from app.settings import Settings, get_settings
 
 router = APIRouter(prefix="/api", tags=["social"])
 MediaType = Literal["movie", "tv"]
-HANDLE = re.compile(r"^[a-z0-9_.]{3,30}$")
+HANDLE = re.compile(r"^[A-Za-z0-9_.]{3,30}$")
 POST_COLUMNS = """post.id, post.media_type, post.tmdb_id, post.title_name, post.poster_path,
     post.release_date, post.rating, post.review, post.created_at, post.updated_at,
     author.user_id as author_id, author.display_name as author_name, author.handle as author_handle"""
-PROFILE_COLUMNS = """profile.user_id, profile.display_name, profile.handle, profile.bio,
+PROFILE_COLUMNS = """profile.user_id, profile.display_name, profile.handle,
+    case when profile.visibility = 'private' and profile.user_id <> nullif(current_setting('app.user_id', true), '')::uuid
+      and not exists(select 1 from public.follows f where f.follower_id = nullif(current_setting('app.user_id', true), '')::uuid and f.followee_id = profile.user_id and f.status = 'following')
+      then '' else profile.bio end as bio, profile.visibility,
     profile.created_at, profile.updated_at,
+    (profile.visibility = 'public' or profile.user_id = nullif(current_setting('app.user_id', true), '')::uuid
+     or exists(select 1 from public.follows f where f.follower_id = nullif(current_setting('app.user_id', true), '')::uuid and f.followee_id = profile.user_id and f.status = 'following')) as can_view_posts,
     (select count(*) from public.posts p where p.user_id = profile.user_id)::int as post_count,
-    (select count(*) from public.follows f where f.followee_id = profile.user_id)::int as follower_count,
-    (select count(*) from public.follows f where f.follower_id = profile.user_id)::int as following_count,
+    (select count(*) from public.follows f where f.followee_id = profile.user_id and f.status = 'following')::int as follower_count,
+    (select count(*) from public.follows f where f.follower_id = profile.user_id and f.status = 'following')::int as following_count,
     exists(select 1 from public.follows f
-           where f.follower_id = %s and f.followee_id = profile.user_id) as viewer_follows"""
+           where f.follower_id = %s and f.followee_id = profile.user_id and f.status = 'following') as viewer_follows,
+    exists(select 1 from public.follows f where f.follower_id = nullif(current_setting('app.user_id', true), '')::uuid and f.followee_id = profile.user_id and f.status = 'requested') as viewer_requested"""
 
 
 class PostInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    rating: StrictInt = Field(ge=1, le=5)
-    review: str | None = Field(default=None, max_length=1000)
+    rating: float = Field(ge=0.5, le=5, strict=True)
+    review: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("rating")
+    @classmethod
+    def half_stars(cls, value: float) -> float:
+        if value * 2 != int(value * 2):
+            raise ValueError("Ratings must use half-star steps.")
+        return value
 
 
 class ProfileInput(BaseModel):
@@ -71,10 +84,13 @@ def shape_profile(row: dict) -> dict:
         "display_name": row["display_name"],
         "handle": row["handle"],
         "bio": row["bio"],
-        "post_count": row["post_count"],
-        "follower_count": row["follower_count"],
-        "following_count": row["following_count"],
+        "post_count": row["post_count"] if row["can_view_posts"] else 0,
+        "follower_count": row["follower_count"] if row["can_view_posts"] else 0,
+        "following_count": row["following_count"] if row["can_view_posts"] else 0,
+        "can_view_posts": row["can_view_posts"],
         "viewer_follows": row["viewer_follows"],
+        "visibility": row["visibility"],
+        "viewer_requested": row["viewer_requested"],
     }
 
 
@@ -101,10 +117,11 @@ class PostgresSocialStore:
             select {POST_COLUMNS}
             from public.posts post
             join public.profiles author on author.user_id = post.user_id
-            where %s = 'public' or post.user_id = %s
-               or post.user_id in (select f.followee_id from public.follows f where f.follower_id = %s)
+            where (%s = 'public' and author.visibility = 'public')
+               or (%s = 'following' and (post.user_id = %s
+                 or post.user_id in (select f.followee_id from public.follows f where f.follower_id = %s and f.status = 'following')))
             order by post.created_at desc, post.id desc
-            limit %s offset %s""", (scope, user_id, user_id, limit, offset), many=True)
+            limit %s offset %s""", (scope, scope, user_id, user_id, limit, offset), many=True)
         return [shape_post(row) for row in rows]
 
     def posts_for_title(self, user_id: str, media_type: str, tmdb_id: int, limit: int) -> list[dict]:
@@ -199,14 +216,45 @@ class PostgresSocialStore:
         return shape_profile(row)
 
     def follow(self, user_id: str, profile_id: str) -> None:
-        if self._run(user_id, "select 1 from public.profiles where user_id = %s", (profile_id,)) is None:
-            raise APIError(404, "profile_not_found", "Profile not found.")
-        self._run(user_id, """insert into public.follows (follower_id, followee_id)
-            values (%s, %s) on conflict do nothing returning follower_id""", (user_id, profile_id))
+        profile = self.profile(user_id, profile_id)
+        status = "requested" if profile["visibility"] == "private" else "following"
+        self._run(user_id, """insert into public.follows (follower_id, followee_id, status)
+            values (%s, %s, %s) on conflict do nothing returning follower_id""", (user_id, profile_id, status))
 
     def unfollow(self, user_id: str, profile_id: str) -> None:
-        self._run(user_id, """delete from public.follows where follower_id = %s and followee_id = %s
-            returning follower_id""", (user_id, profile_id))
+        self._run(user_id, "delete from public.follows where follower_id = %s and followee_id = %s returning follower_id",
+                  (user_id, profile_id))
+
+    def set_visibility(self, user_id: str, visibility: str) -> dict:
+        self._run(user_id, "update public.profiles set visibility = %s where user_id = %s returning user_id",
+                  (visibility, user_id))
+        return self.profile(user_id, user_id)
+
+    def requests(self, user_id: str, limit: int, offset: int) -> list[dict]:
+        rows = self._run(user_id, """select f.follower_id, p.display_name, p.handle, f.created_at
+            from public.follows f join public.profiles p on p.user_id = f.follower_id
+            where f.followee_id = %s and f.status = 'requested' order by f.created_at, f.follower_id
+            limit %s offset %s""",
+            (user_id, limit, offset), many=True)
+        return [{"user_id": str(r["follower_id"]), "display_name": r["display_name"],
+                 "handle": r["handle"], "created_at": r["created_at"].isoformat()} for r in rows]
+
+    def resolve_request(self, user_id: str, requester_id: str, approve: bool) -> None:
+        if approve:
+            row = self._run(user_id, """update public.follows set status = 'following'
+                where follower_id = %s and followee_id = %s and status = 'requested' returning follower_id""",
+                (requester_id, user_id))
+        else:
+            row = self._run(user_id, """delete from public.follows
+                where follower_id = %s and followee_id = %s and status = 'requested' returning follower_id""",
+                (requester_id, user_id))
+        if row is None:
+            raise APIError(404, "request_not_found", "Follow request not found.")
+
+    def remove_follower(self, user_id: str, follower_id: str) -> None:
+        self._run(user_id, "delete from public.follows where follower_id = %s and followee_id = %s returning follower_id",
+                  (follower_id, user_id))
+
 
 
 def social_store(settings: Settings = Depends(get_settings)) -> PostgresSocialStore:
@@ -218,10 +266,11 @@ def social_store(settings: Settings = Depends(get_settings)) -> PostgresSocialSt
 @router.get("/feed")
 def read_feed(scope: Literal["public", "following"] = Query(default="public"),
               limit: int = Query(default=30, ge=1, le=50),
-              offset: int = Query(default=0, ge=0, le=1000),
+              offset: int = Query(default=0, ge=0),
               user: AuthenticatedUser = Depends(current_user),
               store: PostgresSocialStore = Depends(social_store)) -> dict:
-    return {"items": store.feed(user.id, scope, limit, offset)}
+    rows = store.feed(user.id, scope, limit + 1, offset)
+    return {"items": rows[:limit], "next_offset": offset + limit if len(rows) > limit else None}
 
 
 @router.get("/profiles")
@@ -239,11 +288,14 @@ def read_profile(profile_id: UUID, user: AuthenticatedUser = Depends(current_use
 
 @router.get("/profiles/{profile_id}/posts")
 def read_profile_posts(profile_id: UUID, limit: int = Query(default=30, ge=1, le=50),
-                       offset: int = Query(default=0, ge=0, le=1000),
+                       offset: int = Query(default=0, ge=0),
                        user: AuthenticatedUser = Depends(current_user),
                        store: PostgresSocialStore = Depends(social_store)) -> dict:
-    store.profile(user.id, str(profile_id))
-    return {"items": store.posts_by_author(user.id, str(profile_id), limit, offset)}
+    profile = store.profile(user.id, str(profile_id))
+    if profile.get("visibility") == "private" and str(profile_id) != user.id and not profile["viewer_follows"]:
+        raise APIError(403, "profile_private", "This profile is private.")
+    rows = store.posts_by_author(user.id, str(profile_id), limit + 1, offset)
+    return {"items": rows[:limit], "next_offset": offset + limit if len(rows) > limit else None}
 
 
 @router.get("/me/profile")
@@ -256,13 +308,53 @@ def read_own_profile(user: AuthenticatedUser = Depends(current_user),
 def update_own_profile(body: ProfileInput, user: AuthenticatedUser = Depends(current_user),
                        store: PostgresSocialStore = Depends(social_store)) -> dict:
     display_name = body.display_name.strip()
-    handle = body.handle.strip().lower()
+    handle = body.handle.strip()
     if not display_name:
         raise APIError(422, "invalid_profile", "Enter a display name.")
     if not HANDLE.fullmatch(handle):
         raise APIError(422, "invalid_profile",
-                       "Handles use 3-30 lowercase letters, numbers, dots or underscores.")
+                       "Usernames use 3-30 letters, numbers, dots or underscores.")
     return store.update_profile(user.id, display_name, handle, body.bio.strip())
+
+
+class VisibilityInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    visibility: Literal["public", "private"]
+
+
+@router.patch("/me/profile/visibility")
+def change_visibility(body: VisibilityInput, user: AuthenticatedUser = Depends(current_user),
+                      store: PostgresSocialStore = Depends(social_store)) -> dict:
+    return store.set_visibility(user.id, body.visibility)
+
+
+@router.get("/me/follow-requests")
+def list_follow_requests(limit: int = Query(default=20, ge=1, le=50), offset: int = Query(default=0, ge=0),
+                         user: AuthenticatedUser = Depends(current_user),
+                         store: PostgresSocialStore = Depends(social_store)) -> dict:
+    rows = store.requests(user.id, limit + 1, offset)
+    return {"items": rows[:limit], "next_offset": offset + limit if len(rows) > limit else None}
+
+
+@router.post("/me/follow-requests/{requester_id}/approve", status_code=204)
+def approve_follow_request(requester_id: UUID, user: AuthenticatedUser = Depends(current_user),
+                           store: PostgresSocialStore = Depends(social_store)) -> Response:
+    store.resolve_request(user.id, str(requester_id), True)
+    return Response(status_code=204)
+
+
+@router.post("/me/follow-requests/{requester_id}/decline", status_code=204)
+def decline_follow_request(requester_id: UUID, user: AuthenticatedUser = Depends(current_user),
+                           store: PostgresSocialStore = Depends(social_store)) -> Response:
+    store.resolve_request(user.id, str(requester_id), False)
+    return Response(status_code=204)
+
+
+@router.delete("/me/followers/{follower_id}", status_code=204)
+def remove_follower(follower_id: UUID, user: AuthenticatedUser = Depends(current_user),
+                    store: PostgresSocialStore = Depends(social_store)) -> Response:
+    store.remove_follower(user.id, str(follower_id))
+    return Response(status_code=204)
 
 
 @router.put("/profiles/{profile_id}/follow", status_code=204)
@@ -300,7 +392,7 @@ def create_post(media_type: MediaType, tmdb_id: int, body: PostInput,
         title = tmdb_get(f"/{media_type}/{tmdb_id}")
     except APIError as exc:
         if exc.status_code == 404:
-            raise APIError(422, "invalid_title", "This title does not exist for the selected media type.") from exc
+            raise APIError(404, "title_not_found", "This title does not exist for the selected media type.") from exc
         raise
     if title.get("id") != tmdb_id:
         raise APIError(502, "catalog_upstream_error", "The title could not be verified. Try again.")

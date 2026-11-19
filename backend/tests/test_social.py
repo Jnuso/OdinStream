@@ -136,13 +136,19 @@ class SocialTest(unittest.TestCase):
         self.assertEqual(self.client.delete(f"/api/posts/{body['id']}",
                                             headers=self.headers(self.user_a)).status_code, 204)
 
+    def test_half_star_and_review_length(self):
+        response = self.publish(self.user_a, rating=4.5, review="x" * 2000)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["rating"], 4.5)
+        self.assertEqual(self.publish(self.user_b, rating=0.5, review="x" * 2001).status_code, 422)
+
     def test_rating_bounds_and_unverified_title(self):
-        for rating in (0, 6, "five"):
+        for rating in (0, 6, 1.2, "five"):
             self.assertEqual(self.publish(self.user_a, rating=rating).status_code, 422)
         with patch("app.social.tmdb_get", side_effect=APIError(404, "title_not_found", "missing")):
             response = self.client.post("/api/titles/movie/999/posts", headers=self.headers(self.user_a),
                                         json={"rating": 5})
-        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.status_code, 404)
 
     def test_feed_scopes_and_follows(self):
         self.publish(self.user_a)

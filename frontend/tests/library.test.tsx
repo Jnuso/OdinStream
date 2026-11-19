@@ -8,7 +8,7 @@ type Episode = { episode_number: number; name: string };
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-function fixture(options: { episodes: Episode[] | null; missingSeason?: boolean; missingTitle?: boolean; failDelete?: boolean }) {
+function fixture(options: { episodes: Episode[] | null; missingSeason?: boolean; missingTitle?: boolean; failDelete?: boolean; lastWatched?: Mark }) {
   let watched: Mark[] = [
     { season_number: 1, episode_number: 1 },
     { season_number: 1, episode_number: 2 },
@@ -28,7 +28,7 @@ function fixture(options: { episodes: Episode[] | null; missingSeason?: boolean;
     if (path === "/api/catalog/tv/42/seasons/1") {
       return options.episodes === null ? json({ message: "Catalog unavailable" }, 503) : json({ episodes: options.episodes });
     }
-    if (path === "/api/me/saved-titles/saved-show/episodes") return json({ items: watched });
+    if (path === "/api/me/saved-titles/saved-show/episodes") return json({ items: watched, last_watched: options.lastWatched ?? watched.at(-1) ?? null });
     const match = path.match(/^\/api\/me\/saved-titles\/saved-show\/seasons\/(\d+)\/episodes\/(\d+)$/);
     if (method === "DELETE" && match) {
       if (options.failDelete) return json({ message: "Could not remove episode" }, 503);
@@ -60,6 +60,13 @@ async function removeOnlyEpisodeOne(state: ReturnType<typeof fixture>) {
 }
 
 describe("saved TV episode progress", () => {
+  it("uses the most recently marked episode rather than the furthest episode", async () => {
+    fixture({ episodes: [{ episode_number: 1, name: "First" }, { episode_number: 2, name: "Second" }, { episode_number: 3, name: "Third" }], lastWatched: { season_number: 1, episode_number: 1 } });
+    render(<Library token="test-token" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Episode progress" }));
+    expect((await screen.findByText(/Last watched: S1 E1\. Next: S1 E2/)).textContent).toContain("Second");
+  });
+
   it("merges an omitted saved episode into the TMDB list and removes it individually", async () => {
     const state = fixture({ episodes: [{ episode_number: 2, name: "Known episode" }, { episode_number: 3, name: "Third episode" }] });
     render(<Library token="test-token" />);

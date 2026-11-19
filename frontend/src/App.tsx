@@ -13,6 +13,8 @@ import {
   type Profile,
 } from "./data/social";
 import Account from "./components/Account";
+import Setup from "./components/Setup";
+import { api } from "./data/api";
 import Discover from "./components/Discover";
 import Feed from "./components/Feed";
 import Library from "./components/Library";
@@ -36,6 +38,8 @@ function SidebarProfile({ me }: { me: Profile }) {
 }
 
 export default function App() {
+  const [setup, setSetup] = useState<{ id: string; status: "checking" | "needed" | "ready" | "error" } | null>(null);
+  const [setupRetry, setSetupRetry] = useState(0);
   const [session, setSession] = useState<Session | null>(null);
   const [recovery, setRecovery] = useState(false);
   const [authError, setAuthError] = useState<string | null>(authCallbackError);
@@ -66,7 +70,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!token) {
+    if (!token || !viewerId) { setSetup(null); return; }
+    let active = true;
+    setSetup({ id: viewerId, status: "checking" });
+    api<{ setup_complete: boolean }>("/api/me/setup", token)
+      .then(data => { if (active) setSetup({ id: viewerId, status: data.setup_complete ? "ready" : "needed" }); })
+      .catch(() => { if (active) setSetup({ id: viewerId, status: "error" }); });
+    return () => { active = false; };
+  }, [token, viewerId, setupRetry]);
+
+  useEffect(() => {
+    if (!token || setup?.id !== viewerId || setup.status !== "ready") {
       setMe(null);
       setSuggested([]);
       return;
@@ -77,7 +91,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [token, reloadKey]);
+  }, [token, reloadKey, setup, viewerId]);
 
   useEffect(() => {
     if (!notice) return;
@@ -122,6 +136,15 @@ export default function App() {
       </button>
     </section>
   );
+
+  if (token && !recovery) {
+    if (setup?.id !== viewerId || setup.status === "checking") return <main><p role="status">Checking account setup…</p></main>;
+    if (setup.status === "error") return <main><p role="alert">Could not check account setup. Please try again.</p>
+      <button onClick={() => setSetupRetry(value => value + 1)}>Retry</button>
+      <button onClick={() => { void supabase?.auth.signOut(); }}>Sign out</button></main>;
+    if (setup.status === "needed") return <Setup token={token} onComplete={() => setSetup({ id: viewerId, status: "ready" })}
+      onSignOut={() => { void supabase?.auth.signOut(); }} />;
+  }
 
   return (
     <>
