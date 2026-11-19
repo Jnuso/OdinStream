@@ -13,6 +13,7 @@ insert into auth.users (id, email) values
   ('11111111-1111-4111-8111-111111111111', 'ada@example.test'),
   ('22222222-2222-4222-8222-222222222222', 'grace@example.test');
 
+update public.profiles set setup_complete = true, visibility = 'public';
 select is((select count(*) from public.profiles where user_id in
   ('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222')),
   2::bigint, 'a profile is created for every new account');
@@ -37,21 +38,21 @@ select throws_ok($$insert into public.posts (user_id, media_type, tmdb_id, title
   values ('11111111-1111-4111-8111-111111111111', 'movie', 603, 'The Matrix', 6)$$,
   '23514', null, 'a rating above five is rejected');
 select throws_ok($$insert into public.posts (user_id, media_type, tmdb_id, title_name, rating, review)
-  values ('11111111-1111-4111-8111-111111111111', 'tv', 1396, 'Breaking Bad', 5, repeat('x', 1001))$$,
+  values ('11111111-1111-4111-8111-111111111111', 'tv', 1396, 'Breaking Bad', 5, repeat('x', 2001))$$,
   '23514', null, 'an overlong review is rejected');
 select throws_ok($$insert into public.posts (user_id, media_type, tmdb_id, title_name, rating)
   values ('11111111-1111-4111-8111-111111111111', 'movie', 693134, 'Dune: Part Two', 3)$$,
   '23505', null, 'a user has one post per title');
 select lives_ok($$update public.posts set rating = 4, review = 'Revised after a second watch.'
   where media_type = 'movie' and tmdb_id = 693134$$, 'the author can edit their post');
-select is((select rating from public.posts where tmdb_id = 693134), 4::smallint, 'the edited rating is stored');
+select is((select rating from public.posts where tmdb_id = 693134), 4::numeric, 'the edited rating is stored');
 select is((select count(*) from public.posts), 1::bigint, 'the author sees their own post');
 
 select set_config('app.user_id', '22222222-2222-4222-8222-222222222222', true);
 select is((select count(*) from public.posts), 1::bigint, 'other signed-in users can read public posts');
 select is((select count(*) from public.posts where user_id = '11111111-1111-4111-8111-111111111111'), 1::bigint, 'public posts are readable across accounts');
 select lives_ok($$update public.posts set rating = 1 where tmdb_id = 693134$$, 'updating another post is a no-op');
-select is((select rating from public.posts where tmdb_id = 693134), 4::smallint, 'another user cannot change a rating');
+select is((select rating from public.posts where tmdb_id = 693134), 4::numeric, 'another user cannot change a rating');
 select lives_ok($$delete from public.posts where tmdb_id = 693134$$, 'deleting another post is a no-op');
 select is((select count(*) from public.posts), 1::bigint, 'another user cannot delete a post');
 

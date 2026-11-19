@@ -124,10 +124,6 @@ def read_recommendations(limit: int = Query(default=12, ge=1, le=20),
             scores[key] = 1
         basis = "popular"
 
-    if not candidates and genres:
-        raise APIError(503, "recommendations_unavailable",
-                       "Recommendations are unavailable right now. Try again.")
-
     ordered = sorted(candidates, key=lambda key: (-scores[key], -(candidates[key].get("popularity") or 0)))
     items = []
     for key in ordered[:limit]:

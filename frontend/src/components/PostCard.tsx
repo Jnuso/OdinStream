@@ -48,8 +48,7 @@ export default function PostCard({
             {post.title_name} <span>↗</span>
           </button>
           <span className="stars" aria-label={`${post.rating} out of 5 stars`}>
-            {"★".repeat(post.rating)}
-            <span>{"★".repeat(5 - post.rating)}</span>
+            {post.rating.toFixed(1)} / 5
           </span>
           {post.review ? (
             <p className="review-text">{post.review}</p>

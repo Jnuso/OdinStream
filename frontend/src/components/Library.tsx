@@ -11,6 +11,7 @@ const statuses = { movie: ["watchlist", "watched"], tv: ["watchlist", "watching"
 
 function EpisodeProgress({ entry, token }: { entry: LibraryEntry; token: string }) {
   const [watched, setWatched] = useState<Watched[] | null>(null);
+  const [lastWatched, setLastWatched] = useState<Watched | null>(null);
   const [season, setSeason] = useState<number | null>(null);
   const [episodes, setEpisodes] = useState<Episode[] | null>(null);
   const [error, setError] = useState("");
@@ -20,8 +21,8 @@ function EpisodeProgress({ entry, token }: { entry: LibraryEntry; token: string 
 
   useEffect(() => {
     let active = true;
-    api<{ items: Watched[] }>(`/api/me/saved-titles/${entry.id}/episodes`, token)
-      .then(data => { if (active) setWatched(data.items); })
+    api<{ items: Watched[]; last_watched: Watched | null }>(`/api/me/saved-titles/${entry.id}/episodes`, token)
+      .then(data => { if (active) { setWatched(data.items); setLastWatched(data.last_watched); } })
       .catch(err => { if (active) setError(err instanceof Error ? err.message : "Could not load progress."); });
     return () => { active = false; };
   }, [entry.id, token]);
@@ -30,7 +31,8 @@ function EpisodeProgress({ entry, token }: { entry: LibraryEntry; token: string 
     let active = true;
     setNext("");
     if (!watched?.length) { setNext("No episodes marked watched yet."); return; }
-    const last = [...watched].sort((a, b) => b.season_number - a.season_number || b.episode_number - a.episode_number)[0];
+    const last = lastWatched;
+    if (!last) { setNext("Last watched episode is unavailable."); return; }
     const seasons = entry.title?.seasons;
     if (!seasons || !seasons.some(item => item.season_number === last.season_number)) {
       setNext(`Last watched: S${last.season_number} E${last.episode_number}. Next episode unavailable because season metadata is missing.`);
@@ -61,7 +63,7 @@ function EpisodeProgress({ entry, token }: { entry: LibraryEntry; token: string 
       }
     })();
     return () => { active = false; };
-  }, [watched, entry.title, entry.tmdb_id]);
+  }, [watched, lastWatched, entry.title, entry.tmdb_id]);
 
   async function openSeason(number: number) {
     setSeason(number); setEpisodes(null); setError(""); setLoading(true);
@@ -78,8 +80,8 @@ function EpisodeProgress({ entry, token }: { entry: LibraryEntry; token: string 
     try {
       const path = `/api/me/saved-titles/${entry.id}/seasons/${season}/episodes${episode === undefined ? "" : `/${episode}`}`;
       await api(path, token, { method });
-      const data = await api<{ items: Watched[] }>(`/api/me/saved-titles/${entry.id}/episodes`, token);
-      setWatched(data.items);
+      const data = await api<{ items: Watched[]; last_watched: Watched | null }>(`/api/me/saved-titles/${entry.id}/episodes`, token);
+      setWatched(data.items); setLastWatched(data.last_watched);
     } catch (err) { setError(err instanceof Error ? err.message : "Could not update progress."); }
     finally { setBusy(false); }
   }
@@ -116,6 +118,7 @@ function EpisodeProgress({ entry, token }: { entry: LibraryEntry; token: string 
 export default function Library({ token }: { token: string | null }) {
   const [items, setItems] = useState<LibraryEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -124,16 +127,30 @@ export default function Library({ token }: { token: string | null }) {
     if (!token) { setItems([]); return; }
     let active = true;
     setLoading(true); setError(""); setItems([]);
-    api<{ items: Entry[] }>("/api/me/saved-titles", token).then(async data => {
+    api<{ items: Entry[]; next_offset?: number | null }>("/api/me/saved-titles", token).then(async data => {
       const items = await Promise.all(data.items.map(async entry => {
         try { return { ...entry, title: await api<Title>(`/api/catalog/${entry.media_type}/${entry.tmdb_id}`) }; }
         catch { return entry; }
       }));
-      if (active) setItems(items);
+      if (active) { setItems(items); setNextOffset(data.next_offset ?? null); }
     }).catch(err => { if (active) setError(err instanceof Error ? err.message : "Could not load your library."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [token]);
+
+  async function loadMore() {
+    if (!token || nextOffset === null) return;
+    setLoading(true); setError("");
+    try {
+      const data = await api<{ items: Entry[]; next_offset: number | null }>(`/api/me/saved-titles?offset=${nextOffset}`, token);
+      const enriched = await Promise.all(data.items.map(async entry => {
+        try { return { ...entry, title: await api<Title>(`/api/catalog/${entry.media_type}/${entry.tmdb_id}`) }; }
+        catch { return entry; }
+      }));
+      setItems(previous => [...previous, ...enriched]); setNextOffset(data.next_offset);
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not load more titles."); }
+    finally { setLoading(false); }
+  }
 
   async function update(entry: Entry, status: string) {
     if (!token) return;
@@ -167,6 +184,7 @@ export default function Library({ token }: { token: string | null }) {
         <button className="secondary" disabled={busy !== null} onClick={() => remove(item)}>Remove</button>
         {expanded === item.id && <EpisodeProgress entry={item} token={token} />}
       </article>)}</div>
+      {nextOffset !== null && <button className="secondary" disabled={loading} onClick={() => void loadMore()}>Load more titles</button>}
     </>}
   </section>;
 }

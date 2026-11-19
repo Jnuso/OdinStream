@@ -152,7 +152,7 @@ export default function PostComposer({
             Your rating <span>(required)</span>
           </legend>
           <div role="radiogroup" aria-label="Your rating">
-            {[1, 2, 3, 4, 5].map((value) => (
+            {[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map((value) => (
               <button
                 type="button"
                 role="radio"
@@ -165,31 +165,31 @@ export default function PostComposer({
                   setError("");
                 }}
               >
-                ★
+                {value}
               </button>
             ))}
           </div>
-          <span className="small muted">{rating ? `${rating} out of 5 stars` : "Choose 1–5 stars"}</span>
+          <span className="small muted">{rating ? `${rating} out of 5 stars` : "Choose 0.5–5 stars"}</span>
         </fieldset>
         <label htmlFor="review">
           Your review <span className="muted">(optional)</span>
         </label>
         <textarea
           id="review"
-          maxLength={1000}
+          maxLength={2000}
           rows={4}
           placeholder="Write your review…"
           value={review}
           onChange={(event) => setReview(event.target.value)}
         />
-        <span className="character-count">{review.length}/1000</span>
+        <span className="character-count">{review.length}/2000</span>
         {error && (
           <p role="alert" className="form-error">
             {error}
           </p>
         )}
         <div className="composer-footer">
-          <p>Public in the feed. You can edit or delete your post later.</p>
+          <p>Your profile visibility determines who can see this post. You can edit or delete it later.</p>
           <button type="submit" className="primary" disabled={busy}>
             {busy ? "Saving…" : post ? "Save changes" : "Publish post"} <span>↗</span>
           </button>
