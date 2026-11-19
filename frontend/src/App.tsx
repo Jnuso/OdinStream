@@ -25,10 +25,12 @@ import ProfileScreen from "./components/Profile";
 import NavIcon from "./components/NavIcon";
 import "./App.css";
 import "./SiteRefinements.css";
+import FollowRequests, { RequestBadge } from "./components/FollowRequests";
+import { useFollowRequests } from "./data/useFollowRequests";
 
 type Focus = { media_type: MediaType; id: number };
 
-function SidebarProfile({ me, onOpen }: { me: Profile; onOpen: () => void }) {
+function SidebarProfile({ me, onOpen, requestCount, hasMore }: { me: Profile; onOpen: () => void; requestCount: number; hasMore: boolean }) {
   return (
     <button className="demo-account" onClick={onOpen} aria-label={`View your profile, ${me.display_name}`}>
       <span className={`avatar ${avatarColor(me.id)}`}>{initials(me.display_name)}</span>
@@ -36,6 +38,7 @@ function SidebarProfile({ me, onOpen }: { me: Profile; onOpen: () => void }) {
         <strong>{me.display_name}</strong>
         <small>@{me.handle}</small>
       </span>
+      <RequestBadge count={requestCount} hasMore={hasMore} />
     </button>
   );
 }
@@ -114,6 +117,7 @@ export default function App() {
     navigate({ page: "discover", feed, profileId });
   };
   const refresh = () => setReloadKey((value) => value + 1);
+  const requests = useFollowRequests(token, viewerId, !!token && setup?.id === viewerId && setup.status === "ready", reloadKey, refresh);
 
   function startComposer() {
     setReviewTitle(null);
@@ -207,7 +211,7 @@ export default function App() {
             aria-current={viewingOwnProfile ? "page" : undefined}
             onClick={() => (token ? openProfile("me") : setPage("account"))}
           >
-            <NavIcon name="profile" />My Profile
+            <NavIcon name="profile" />My Profile <RequestBadge count={requests.items.length} hasMore={requests.hasMore} />
           </button>
           <button className={`nav-item ${page === "account" ? "active" : ""}`} aria-current={page === "account" ? "page" : undefined} onClick={() => setPage("account")}>
             <NavIcon name="account" />Account
@@ -216,7 +220,7 @@ export default function App() {
         <button className="primary new-post" onClick={startComposer}>
           <NavIcon name="plus" /> New post
         </button>
-        {me ? <SidebarProfile me={me} onOpen={() => openProfile("me")} /> : <p className="rail-footnote">Not signed in</p>}
+        {me ? <SidebarProfile me={me} onOpen={() => openProfile("me")} requestCount={requests.items.length} hasMore={requests.hasMore} /> : <p className="rail-footnote">Not signed in</p>}
       </aside>
       <div className="workspace">
         <header className="topbar">
@@ -228,6 +232,7 @@ export default function App() {
             {token && <button className="mobile-account-shortcut" aria-label="Open account settings" onClick={() => setPage("account")}><NavIcon name="account" /></button>}
             <button className="account-shortcut" aria-label={token ? "View your profile" : "Sign in"} onClick={() => token ? openProfile("me") : setPage("account")}>
               {me ? <span className={`avatar ${avatarColor(me.id)}`}>{initials(me.display_name)}</span> : "Sign in"}
+              <RequestBadge count={requests.items.length} hasMore={requests.hasMore} />
             </button>
           </div>
         </header>
@@ -305,6 +310,7 @@ export default function App() {
               onEdit={setComposer}
               onChanged={refresh}
               onOpenAccount={() => setPage("account")}
+              followRequests={<FollowRequests model={requests} onOpenProfile={openProfile} />}
             />
           ) : (
             signInPrompt("your profile")
@@ -319,7 +325,7 @@ export default function App() {
       </div>
       <nav className="mobile-nav" aria-label="Mobile navigation">
         {([ ["discover", "Discover"], ["library", "Library"], ["feed", "Feed"], ["profile", "Profile"] ] as const).map(([target, label]) => (
-          <button key={target} aria-current={(target === "profile" ? viewingOwnProfile : page === target) ? "page" : undefined} onClick={() => target === "profile" ? (token ? openProfile("me") : setPage("account")) : setPage(target)}><NavIcon name={target} /><span>{label}</span></button>
+          <button key={target} aria-current={(target === "profile" ? viewingOwnProfile : page === target) ? "page" : undefined} onClick={() => target === "profile" ? (token ? openProfile("me") : setPage("account")) : setPage(target)}><NavIcon name={target} />{target === "profile" && <RequestBadge count={requests.items.length} hasMore={requests.hasMore} />}<span>{label}</span></button>
         ))}
         <button onClick={startComposer}><NavIcon name="plus" /><span>New post</span></button>
       </nav>

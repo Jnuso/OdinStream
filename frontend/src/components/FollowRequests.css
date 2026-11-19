@@ -1,0 +1,19 @@
+.request-badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 12px; background: #d5eaa2; color: #24301b; font-size: 10px; font-weight: 700; line-height: 1; flex-shrink: 0; border: 2px solid #131614; }
+.nav-item > .request-badge { margin-left: auto; font-size: 10px; }
+.demo-account > .request-badge { margin-left: auto; }
+.account-shortcut { position: relative; }
+.account-shortcut > .request-badge { position: absolute; top: -3px; right: -5px; }
+.mobile-nav button { position: relative; }
+.mobile-nav .request-badge { position: absolute; top: 0; left: calc(50% + 3px); min-width: 17px; height: 17px; font-size: 9px; }
+.follow-requests { padding: 24px; margin-bottom: 32px; border: 1px solid #ffffff12; border-radius: 12px; background: #181d18; }
+.follow-requests-heading { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; }
+.follow-requests h2 { font-size: 17px; font-weight: 600; }
+.follow-request-row { display: flex; gap: 20px; justify-content: space-between; align-items: center; padding: 16px 0; border-top: 1px solid #ffffff0b; }
+.follow-request-row .author-link { min-width: 0; }
+.follow-request-row .author-link > span:last-child { overflow-wrap: anywhere; }
+.request-actions { display: flex; flex-shrink: 0; gap: 8px; }
+.request-actions button { font-size: 12px; min-height: 38px; padding: 9px 13px; }
+.request-actions button[aria-disabled="true"] { cursor: wait; }
+.request-error { display: flex; gap: 14px; align-items: baseline; }
+.request-error p { margin: 0; }
+@media (max-width: 480px) { .follow-requests { padding: 20px; } .follow-request-row { flex-direction: column; align-items: stretch; gap: 14px; } .request-actions { justify-content: flex-end; } }
