@@ -15,7 +15,7 @@ npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite. During local development, Discover calls the FastAPI backend at `http://127.0.0.1:8000` by default; production builds default to the same origin. Set `VITE_API_BASE_URL` to the backend origin if different; use HTTPS outside local development. Configure the backend's TMDB token as described in `backend/README.md`. For account and library features, configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in an ignored `frontend/.env.local` file and restart Vite. Use only the public/publishable key, never a service-role or secret key. Configure the frontend origin in Supabase Auth's redirect allow-list; email confirmation and password reset require email delivery.
+Open the local URL printed by Vite. During local development, Discover calls the FastAPI backend at `http://127.0.0.1:8000` by default; production builds default to the same origin. Set `VITE_API_BASE_URL` to the backend origin if different; use HTTPS outside local development. Configure the backend's TMDB token as described in `backend/README.md`. For account and library features, configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in an ignored `frontend/.env.local` file and restart Vite. Use only the public/publishable key, never a service-role or secret key. Configure the frontend origin in Supabase Auth's redirect allow-list; email confirmation and password reset require email delivery. Local Supabase development captures messages in Inbucket at `http://127.0.0.1:54324`. See [the email delivery verification guide](../documentation/project/email-delivery.md) for hosted checks.
 
 ## Checks and production preview
 

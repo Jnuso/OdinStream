@@ -8,7 +8,7 @@ vi.mock("../src/data/auth", () => ({ supabase: { auth: { signOut: vi.fn().mockRe
 
 type Preferences = { favorite_genres: string[]; streaming_services: string[] };
 const session = (id: string, token = id) => ({ user: { id, email: `${id}@example.test` }, access_token: token }) as Session;
-const props = { recovery: false, callbackError: null, onClearCallbackError: () => {}, onRecoveryComplete: () => {} };
+const props = { recovery: false, callbackError: null, onClearCallbackError: () => {}, onRecoveryComplete: () => {}, onDeleted: () => {} };
 const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -71,4 +71,21 @@ it("keeps edits visible and reports a failed save", async () => {
   expect((await screen.findByRole("alert")).textContent).toBe("Save failed");
   expect(comedy.checked).toBe(true);
   expect(screen.queryByText("Preferences saved.")).toBeNull();
+});
+
+it("requires explicit confirmation and password before deleting an account", async () => {
+  const deleted = vi.fn();
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => init?.method === "DELETE"
+    ? new Response(null, { status: 204 })
+    : response({ favorite_genres: [], streaming_services: [] }));
+  vi.stubGlobal("fetch", fetchMock);
+  render(<Account {...props} onDeleted={deleted} session={session("a", "delete-token")} />);
+  await screen.findByText("Delete account");
+  const deleteButton = screen.getByRole("button", { name: "Permanently delete account" });
+  expect((deleteButton as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText("Current password"), { target: { value: "password" } });
+  fireEvent.change(screen.getByLabelText("Type DELETE to confirm"), { target: { value: "DELETE" } });
+  fireEvent.click(deleteButton);
+  await waitFor(() => expect(deleted).toHaveBeenCalledOnce());
+  expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE" && init.body === JSON.stringify({ password: "password" }))).toBe(true);
 });
