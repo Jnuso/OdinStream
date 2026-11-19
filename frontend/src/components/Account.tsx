@@ -71,9 +71,66 @@ function AccountPreferences({ token }: { token: string }) {
 
 type Mode = "signin" | "signup" | "reset" | "recovery";
 
-export default function Account({ session, recovery, callbackError, onClearCallbackError, onRecoveryComplete }: {
+function DeleteAccount({ token, onDeleted }: { token: string; onDeleted: () => void }) {
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (confirmation !== "DELETE") return;
+    setBusy(true);
+    setError("");
+    try {
+      await api<void>("/api/me", token, {
+        method: "DELETE",
+        body: JSON.stringify({ password }),
+      });
+      onDeleted();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete the account.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="account-danger">
+      <h2>Delete account</h2>
+      <p>This permanently removes your profile, library, posts, and preferences. This cannot be undone.</p>
+      <form onSubmit={submit}>
+        <label htmlFor="delete-account-password">Current password</label>
+        <input
+          id="delete-account-password"
+          type="password"
+          value={password}
+          onChange={event => setPassword(event.target.value)}
+          required
+          autoComplete="current-password"
+          disabled={busy}
+        />
+        <label htmlFor="delete-account-confirmation">Type DELETE to confirm</label>
+        <input
+          id="delete-account-confirmation"
+          value={confirmation}
+          onChange={event => setConfirmation(event.target.value)}
+          required
+          pattern="DELETE"
+          disabled={busy}
+        />
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <button className="danger" type="submit" disabled={busy || confirmation !== "DELETE"}>
+          {busy ? "Deleting account…" : "Permanently delete account"}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+export default function Account({ session, recovery, callbackError, onClearCallbackError, onRecoveryComplete, onDeleted }: {
   session: Session | null; recovery: boolean; callbackError: string | null;
-  onClearCallbackError: () => void; onRecoveryComplete: () => void;
+  onClearCallbackError: () => void; onRecoveryComplete: () => void; onDeleted: () => void;
 }) {
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
@@ -124,7 +181,7 @@ export default function Account({ session, recovery, callbackError, onClearCallb
   if (session && mode !== "recovery") return <section className="account-page"><div className="page-heading"><div><h1>Account</h1><p>Your preferences and sign-in details, all in one place.</p></div></div>{callbackError && <p className="form-error" role="alert">{callbackError}</p>}<div className="account-summary"><div><h2>Signed in</h2><p>{session.user.email}</p></div><button className="secondary" onClick={async () => {
     const { error } = await client.auth.signOut();
     if (error) setError(error.message);
-  }}>Sign out</button></div>{error && <p className="form-error" role="alert">{error}</p>}<AccountPreferences key={session.user.id} token={session.access_token} /></section>;
+  }}>Sign out</button></div>{error && <p className="form-error" role="alert">{error}</p>}<AccountPreferences key={session.user.id} token={session.access_token} /><DeleteAccount token={session.access_token} onDeleted={onDeleted} /></section>;
 
   return <section className="account-page account-auth"><span className="eyebrow">Your next watch starts here</span><h1>{mode === "signup" ? "Create account" : mode === "reset" ? "Reset password" : mode === "recovery" ? "Choose a new password" : "Welcome back"}</h1><p className="muted">{mode === "signup" ? "Save your favorites and share what’s worth watching." : mode === "signin" ? "Sign in to your library, reviews, and recommendations." : "Let’s get you back into your account."}</p>
     <form className="composer account-form" onSubmit={submit}>

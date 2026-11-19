@@ -23,6 +23,20 @@ Before merging the first migration, a repository administrator should:
 
 The connection password used by the migration CLI is an administrative credential and must stay separate from the least-privileged role planned for the FastAPI application. Database CI exercises the backend role's row-level policies, but does not verify API authentication, live TMDB verification, or the security of the configured runtime login.
 
+## Email delivery
+
+Local Auth email is captured by Inbucket at `http://127.0.0.1:54324`; it is not
+delivered externally. The local configuration keeps email confirmations enabled so
+signup and password-reset flows can be verified without provider credentials.
+
+The hosted development project uses Supabase's default email service for now. Set
+the deployed frontend origin and exact redirect URLs in **Authentication → URL
+Configuration**, then verify confirmation, resend, password reset, recovery, and
+invalid-link behavior with a disposable account. Supabase's default service is not
+a production delivery commitment; configure SMTP in the dashboard before relying
+on production email. Never commit or share SMTP credentials. See
+[the project email-delivery guide](../documentation/project/email-delivery.md).
+
 ## Profile privacy
 
 New profiles are private and hidden from other users until required setup is completed; existing profiles keep their current visibility. Private profiles expose posts only to the owner and approved followers; the public feed never includes private posts. A follow of a private profile creates a request. The owner can approve or decline it, and either participant can remove the relationship. Switching a public profile to private keeps existing followers. Pending requests are automatically approved when the profile becomes public. The frontend still needs controls for visibility and request management.

@@ -149,6 +149,13 @@
 .account-preferences .service-check { display: inline-flex; gap: 8px; margin: 0; padding: 10px 12px; border: 1px solid #ffffff1c; border-radius: 8px; font-size: 13px; cursor: pointer; }
 .account-preferences .service-check:has(input:checked) { background: #d5eaa20b; border-color: #d5eaa260; }
 .account-preferences input { width: 16px; height: 16px; margin: 0; }
+.account-danger { max-width: none; margin-top: 24px; padding: 28px; border: 1px solid #a34a4a66; background: #291919; border-radius: 12px; }
+.account-danger h2 { margin-bottom: 12px; }
+.account-danger > p { max-width: 650px; color: #d1aaa5; font-size: 13px; line-height: 1.7; }
+.account-danger form { display: grid; gap: 10px; max-width: 480px; margin-top: 18px; }
+.account-danger input { min-height: 44px; }
+.account-danger .danger { justify-self: start; margin-top: 8px; color: #fff; background: #a33f3f; border-color: #a33f3f; }
+.account-danger .danger:hover { background: #bd4d4d; border-color: #bd4d4d; }
 .account-auth { max-width: 580px; margin: 20px auto 0; padding: 32px; border: 1px solid var(--line); background: #191e19; border-radius: 14px; }
 .account-auth h1 { font-size: 30px; margin: 12px 0; }
 .account-auth > p { font-size: 14px; line-height: 1.7; }

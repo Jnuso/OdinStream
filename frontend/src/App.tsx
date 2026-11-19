@@ -248,6 +248,11 @@ export default function App() {
               callbackError={authError}
               onClearCallbackError={() => setAuthError(null)}
               onRecoveryComplete={() => setRecovery(false)}
+              onDeleted={() => {
+                setSession(null);
+                setMe(null);
+                setSuggested([]);
+              }}
             />
           ) : page === "feed" ? (
             token ? (
