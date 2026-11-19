@@ -1,21 +1,22 @@
 """Public movie and TV discovery backed by TMDB."""
 
-import json
+import logging
 import os
+import time
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 from typing import Literal
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
+import httpx
 from fastapi import APIRouter, Depends, Query
 
 from app.accounts import current_user, preference_store
 from app.auth import AuthenticatedUser
+from app.errors import APIError
 from app.preferences import PreferenceStore
 
-from app.errors import APIError
-
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/catalog", tags=["catalog"])
 filtered_router = APIRouter(prefix="/api/me/catalog", tags=["catalog"])
 
@@ -25,28 +26,89 @@ SERVICE_NAMES = {"Netflix": {"netflix"}, "Hulu": {"hulu"}, "Disney+": {"disney p
 TMDB_BASE = "https://api.themoviedb.org/3"
 MediaType = Literal["movie", "tv"]
 
+_TMDB_CACHE_TTL_SECONDS = 600.0
+_TMDB_CACHE_MAX_ENTRIES = 512
+_tmdb_cache: OrderedDict[tuple, tuple[float, dict]] = OrderedDict()
+_tmdb_cache_lock = Lock()
+_tmdb_client_lock = Lock()
+_tmdb_client: httpx.Client | None = None
+
+
+def _get_client() -> httpx.Client:
+    global _tmdb_client
+    with _tmdb_client_lock:
+        if _tmdb_client is None or _tmdb_client.is_closed:
+            _tmdb_client = httpx.Client(
+                base_url=TMDB_BASE,
+                timeout=10.0,
+                headers={"Accept": "application/json"},
+            )
+        return _tmdb_client
+
+
+def close_tmdb_client() -> None:
+    global _tmdb_client
+    with _tmdb_client_lock:
+        if _tmdb_client is not None and not _tmdb_client.is_closed:
+            _tmdb_client.close()
+        _tmdb_client = None
+
+
+def clear_tmdb_cache() -> None:
+    with _tmdb_cache_lock:
+        _tmdb_cache.clear()
+
+
+def _cache_key(path: str, params: dict | None) -> tuple:
+    items = tuple(sorted((str(k), str(v)) for k, v in (params or {}).items()))
+    return (path, items)
+
 
 def tmdb_get(path: str, params: dict | None = None) -> dict:
     token = os.environ.get("TMDB_READ_ACCESS_TOKEN", "").strip()
     if not token:
         raise APIError(503, "catalog_unavailable", "Movie and TV discovery is not configured.")
-    url = TMDB_BASE + path
-    if params:
-        url += "?" + urlencode(params)
-    request = Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
+
+    key = _cache_key(path, params)
+    now = time.monotonic()
+    with _tmdb_cache_lock:
+        cached = _tmdb_cache.get(key)
+        if cached is not None:
+            expires_at, payload = cached
+            if expires_at > now:
+                _tmdb_cache.move_to_end(key)
+                return payload
+            _tmdb_cache.pop(key, None)
+
     try:
-        with urlopen(request, timeout=10) as response:
-            data = json.load(response)
-    except HTTPError as exc:
-        if exc.code == 404:
+        response = _get_client().get(
+            path,
+            params=params,
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        response.raise_for_status()
+        data = response.json()
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        if status_code == 404:
             raise APIError(404, "title_not_found", "This title could not be found.") from exc
-        if exc.code == 429:
+        if status_code == 429:
+            logger.warning("TMDB rate limit hit on %s", path)
             raise APIError(503, "catalog_rate_limited", "Movie and TV data is busy. Please try again later.") from exc
+        logger.warning("TMDB upstream HTTP %s on %s", status_code, path)
         raise APIError(502, "catalog_upstream_error", "Movie and TV data is unavailable. Please try again.") from exc
-    except (URLError, TimeoutError, OSError, ValueError) as exc:
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.exception("TMDB request failed for %s", path)
         raise APIError(503, "catalog_unavailable", "Movie and TV data is unavailable. Please try again.") from exc
+
     if not isinstance(data, dict):
         raise APIError(502, "catalog_upstream_error", "Movie and TV data could not be read.")
+
+    with _tmdb_cache_lock:
+        _tmdb_cache[key] = (now + _TMDB_CACHE_TTL_SECONDS, data)
+        _tmdb_cache.move_to_end(key)
+        while len(_tmdb_cache) > _TMDB_CACHE_MAX_ENTRIES:
+            _tmdb_cache.popitem(last=False)
     return data
 
 
@@ -83,6 +145,7 @@ def search_available(query: str = Query(min_length=1, max_length=200), page: int
     if not selected:
         raise APIError(422, "no_streaming_services", "Choose streaming services in Account before filtering.")
     data = search(query, page)
+
     def available(item: dict) -> bool:
         providers = tmdb_get(f"/{item['media_type']}/{item['id']}/watch/providers")
         region = providers.get("results", {}).get("US", {})
@@ -94,6 +157,7 @@ def search_available(query: str = Query(min_length=1, max_length=200), page: int
             if any(provider_id in SERVICE_IDS.get(service, set()) or name in SERVICE_NAMES.get(service, set()) for service in selected):
                 return True
         return False
+
     items = data["items"]
     # TMDB multi-search pages contain at most 20 results; limit concurrent lookups.
     with ThreadPoolExecutor(max_workers=5) as pool:
@@ -106,8 +170,10 @@ def search_available(query: str = Query(min_length=1, max_length=200), page: int
 def title_details(media_type: MediaType, tmdb_id: int) -> dict:
     if tmdb_id <= 0:
         raise APIError(422, "invalid_title", "Title IDs must be positive.")
-    data = tmdb_get(f"/{media_type}/{tmdb_id}")
-    providers = tmdb_get(f"/{media_type}/{tmdb_id}/watch/providers")
+    data = tmdb_get(f"/{media_type}/{tmdb_id}", {"append_to_response": "watch/providers"})
+    providers = data.get("watch/providers")
+    if not isinstance(providers, dict):
+        providers = tmdb_get(f"/{media_type}/{tmdb_id}/watch/providers")
     availability = providers.get("results", {}).get("US", {})
     return {
         **summarize(data, media_type),

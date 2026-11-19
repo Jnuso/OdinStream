@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Literal
 from uuid import UUID
@@ -14,9 +15,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.accounts import current_user
 from app.auth import AuthenticatedUser
 from app.catalog import tmdb_get
+from app.db import user_connection
 from app.errors import APIError
 from app.settings import Settings, get_settings
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["social"])
 MediaType = Literal["movie", "tv"]
 HANDLE = re.compile(r"^[A-Za-z0-9_.]{3,30}$")
@@ -101,15 +104,14 @@ class PostgresSocialStore:
     def _run(self, user_id: str, query: str, params: tuple, *, many: bool = False,
              conflict: tuple[int, str, str] | None = None):
         try:
-            with psycopg.connect(self.database_url, row_factory=dict_row) as conn:
-                conn.execute("set local role odin_api")
-                conn.execute("select set_config('app.user_id', %s, true)", (user_id,))
+            with user_connection(self.database_url, user_id, row_factory=dict_row) as conn:
                 cursor = conn.execute(query, params)
                 return cursor.fetchall() if many else cursor.fetchone()
         except psycopg.errors.UniqueViolation as exc:
             status, error, message = conflict or (409, "duplicate_entry", "That entry already exists.")
             raise APIError(status, error, message) from exc
         except psycopg.Error as exc:
+            logger.exception("Social database query failed")
             raise APIError(503, "social_unavailable", "Ratings and reviews are unavailable right now. Try again.") from exc
 
     def feed(self, user_id: str, scope: str, limit: int, offset: int) -> list[dict]:
@@ -145,7 +147,7 @@ class PostgresSocialStore:
         return [shape_post(row) for row in rows]
 
     def create(self, user_id: str, media_type: str, tmdb_id: int, title: dict,
-               rating: int, review: str | None) -> dict:
+               rating: float, review: str | None) -> dict:
         row = self._run(user_id, f"""
             with inserted as (
                 insert into public.posts
@@ -163,7 +165,7 @@ class PostgresSocialStore:
             raise APIError(503, "social_unavailable", "Your post could not be saved. Try again.")
         return shape_post(row)
 
-    def update(self, user_id: str, post_id: UUID, rating: int, review: str | None) -> dict:
+    def update(self, user_id: str, post_id: UUID, rating: float, review: str | None) -> dict:
         row = self._run(user_id, f"""
             with updated as (
                 update public.posts
@@ -216,10 +218,24 @@ class PostgresSocialStore:
         return shape_profile(row)
 
     def follow(self, user_id: str, profile_id: str) -> None:
-        profile = self.profile(user_id, profile_id)
-        status = "requested" if profile["visibility"] == "private" else "following"
-        self._run(user_id, """insert into public.follows (follower_id, followee_id, status)
-            values (%s, %s, %s) on conflict do nothing returning follower_id""", (user_id, profile_id, status))
+        # Atomically verify profile existence and visibility in one statement to avoid TOCTOU races.
+        row = self._run(
+            user_id,
+            """with target as (
+                select user_id, visibility from public.profiles where user_id = %s
+            ), inserted as (
+                insert into public.follows (follower_id, followee_id, status)
+                select %s, target.user_id,
+                       case when target.visibility = 'private' then 'requested' else 'following' end
+                from target
+                on conflict do nothing
+                returning follower_id
+            )
+            select user_id from target""",
+            (profile_id, user_id),
+        )
+        if row is None:
+            raise APIError(404, "profile_not_found", "Profile not found.")
 
     def unfollow(self, user_id: str, profile_id: str) -> None:
         self._run(user_id, "delete from public.follows where follower_id = %s and followee_id = %s returning follower_id",
@@ -254,7 +270,6 @@ class PostgresSocialStore:
     def remove_follower(self, user_id: str, follower_id: str) -> None:
         self._run(user_id, "delete from public.follows where follower_id = %s and followee_id = %s returning follower_id",
                   (follower_id, user_id))
-
 
 
 def social_store(settings: Settings = Depends(get_settings)) -> PostgresSocialStore:
