@@ -85,6 +85,7 @@ export default function Discover({
     if (!token && !serviceFilter) { setError("Sign in and select streaming services in Account to use this filter."); return; }
     const next = !serviceFilter;
     setServiceFilter(next); setError("");
+    setRecommended(null); setRecommendedError("");
     if (submittedQuery) void loadSearch(submittedQuery, 1, next);
   }
 
@@ -100,12 +101,16 @@ export default function Discover({
   useEffect(() => {
     if (!token) {
       setServiceFilter(false); setItems(null); setSubmittedQuery("");
-      setRecommended(null);
-      return;
+      setRecommended(null); setRecommendedError("");
     }
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
     let active = true;
+    setRecommended(null);
     setRecommendedError("");
-    fetchRecommendations(token)
+    fetchRecommendations(token, serviceFilter)
       .then((data) => {
         if (!active) return;
         setRecommended(data.items);
@@ -115,7 +120,7 @@ export default function Discover({
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [token, serviceFilter]);
 
   useEffect(() => {
     if (!focus) return;
@@ -194,7 +199,7 @@ export default function Discover({
           ) : recommended === null ? (
             <Skeleton label="Loading recommendations…" variant="posters" />
           ) : recommended.length === 0 ? (
-            <p className="muted">No recommendations yet. Save a few genres in Account.</p>
+            <p className="muted">{serviceFilter ? "No recommendations are available on your saved services." : "No recommendations yet. Save a few genres in Account."}</p>
           ) : (
             <div className="discover-results recommendation-grid">
               {recommended.map((item) => (
