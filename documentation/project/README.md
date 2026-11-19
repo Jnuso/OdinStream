@@ -6,6 +6,7 @@ Status: draft for review. These documents prepare the initial task list; Kanban 
 - [MVP scope and decisions](scope-and-decisions.md): agreed direction, proposed behavior, exclusions, and open decisions.
 - [User stories and acceptance criteria](user-stories.md): reviewable outcomes to turn into implementation work.
 - [Draft project backlog](project-backlog.md): a complete starting list for review before creating Trello cards.
+- [Trello card set](trello-cards.md): the backlog as paste-ready cards for the board's Kanban lists.
 - [Delivery and collaboration](delivery-and-collaboration.md): proposed dependencies, verification, and team workflow.
 - [Design references](design/README.md): the selected desktop prototype, mobile sketches, and implementation guidance.
 
