@@ -25,6 +25,8 @@ export type Profile = {
   follower_count: number;
   following_count: number;
   viewer_follows: boolean;
+  viewer_requested?: boolean;
+  can_view_posts?: boolean;
   visibility: "public" | "private";
 };
 

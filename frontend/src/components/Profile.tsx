@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   avatarColor,
   fetchProfile,
@@ -11,6 +11,13 @@ import {
 } from "../data/social";
 import PostList from "./PostList";
 import { api } from "../data/api";
+import Modal from "./Modal";
+import "./Profile.css";
+import Skeleton from "./Skeleton";
+
+function canReadPosts(profile: ProfileData, viewerId: string) {
+  return profile.can_view_posts ?? (profile.id === viewerId || profile.visibility === "public" || profile.viewer_follows);
+}
 
 export default function Profile({
   token,
@@ -22,6 +29,7 @@ export default function Profile({
   onEdit,
   onChanged,
   onOpenAccount,
+  followRequests,
 }: {
   token: string;
   viewerId: string;
@@ -32,38 +40,43 @@ export default function Profile({
   onEdit: (post: Post) => void;
   onChanged: () => void;
   onOpenAccount: () => void;
+  followRequests?: ReactNode;
 }) {
   const target = profileId === "me" ? viewerId : profileId;
   const isSelf = target === viewerId;
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [posts, setPosts] = useState<Post[] | null>(null);
+  const [loadedFor, setLoadedFor] = useState<{ token: string; target: string } | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [followBusy, setFollowBusy] = useState(false);
+  const [editingTarget, setEditingTarget] = useState<string | null>(null);
+
+
 
   useEffect(() => {
     let active = true;
-    setProfile(null);
-    setPosts(null);
     setError("");
-    Promise.all([fetchProfile(token, target), fetchProfilePosts(token, target)])
-      .then(([data, items]) => {
+    fetchProfile(token, target)
+      .then(async data => {
+        const items = canReadPosts(data, viewerId) ? await fetchProfilePosts(token, target) : [];
         if (!active) return;
         setProfile(data);
         setPosts(items);
+        setLoadedFor({ token, target });
       })
       .catch((err) => active && setError(err instanceof Error ? err.message : "The profile could not be loaded."));
     return () => {
       active = false;
     };
-  }, [token, target, attempt, reloadKey]);
+  }, [token, viewerId, target, attempt, reloadKey]);
 
   async function toggleFollow() {
     if (!profile) return;
     setFollowBusy(true);
     setError("");
     try {
-      await setFollow(token, profile.id, !profile.viewer_follows);
+      await setFollow(token, profile.id, !profile.viewer_follows && !profile.viewer_requested);
       setAttempt((value) => value + 1);
       onChanged();
     } catch (err) {
@@ -84,10 +97,12 @@ export default function Profile({
       </section>
     );
   }
-  if (!profile || posts === null) return <p role="status">Loading profile…</p>;
+  if (!profile || posts === null || loadedFor?.token !== token || loadedFor.target !== target) return <><Skeleton label="Loading profile…" variant="profile" /><Skeleton label="Loading reviews…" variant="posts" count={2} /></>;
+  const canViewPosts = canReadPosts(profile, viewerId);
 
   return (
-    <>
+    <div className="profile-page">
+      {isSelf && <div className="profile-toolbar"><button className="secondary" onClick={() => setEditingTarget(target)}>Edit profile</button></div>}
       <section className="profile-header" aria-label={`${profile.display_name} profile`}>
         <span className={`avatar ${avatarColor(profile.id)} large-avatar`}>
           {initials(profile.display_name)}
@@ -95,8 +110,9 @@ export default function Profile({
         <div className="profile-identity">
           <span className="eyebrow">@{profile.handle}</span>
           <h1>{profile.display_name}</h1>
-          <p>{profile.bio || (isSelf ? "Add a short bio from your profile settings." : "No bio yet.")}</p>
-          <div className="profile-stats">
+          {canViewPosts && profile.bio.trim() && <p>{profile.bio}</p>}
+        </div>
+          {canViewPosts && <div className="profile-stats" aria-label="Profile statistics">
             <span>
               <strong>{profile.post_count}</strong> Posts
             </span>
@@ -106,32 +122,35 @@ export default function Profile({
             <span>
               <strong>{profile.following_count}</strong> Following
             </span>
-          </div>
-        </div>
+          </div>}
         {!isSelf && (
           <button
-            className={profile.viewer_follows ? "secondary" : "primary"}
+            className={profile.viewer_follows || profile.viewer_requested ? "secondary" : "primary"}
             onClick={toggleFollow}
             disabled={followBusy}
           >
-            {followBusy ? "Saving…" : profile.viewer_follows ? "Unfollow" : "+ Follow"}
+            {followBusy ? "Saving…" : profile.viewer_follows ? "Unfollow" : profile.viewer_requested ? "Cancel request" : profile.visibility === "private" ? "Request to follow" : "+ Follow"}
           </button>
         )}
       </section>
-      {isSelf && (
+      {isSelf && followRequests}
+      {isSelf && editingTarget === target && (
+        <Modal label="Edit profile" onClose={() => setEditingTarget(null)}>
         <ProfileSettings
           token={token}
           profile={profile}
           onSaved={() => {
+            setEditingTarget(null);
             setAttempt((value) => value + 1);
             onChanged();
           }}
-          onOpenAccount={onOpenAccount}
+          onOpenAccount={() => { setEditingTarget(null); onOpenAccount(); }}
         />
+        </Modal>
       )}
       <div className="social-layout">
         <div className="feed-column">
-          <div className="section-heading">
+          {canViewPosts ? <><div className="section-heading">
             <h2>{isSelf ? "Your" : `${profile.display_name.split(" ")[0]}’s`} ratings &amp; reviews</h2>
           </div>
           <PostList
@@ -152,9 +171,14 @@ export default function Profile({
               </section>
             }
           />
+          </> : <section className="empty private-profile-notice">
+            <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="10" width="14" height="11" rx="3" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /><path d="M12 14v3" /></svg>
+            <h2>This profile is private.</h2>
+            <p>{profile.viewer_requested ? "Your follow request is pending approval." : "Request to follow to see their ratings and reviews."}</p>
+          </section>}
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -197,25 +221,9 @@ function ProfileSettings({
   }
 
   return (
-    <section className="rail-card profile-settings">
-      <h2>Profile settings</h2>
-      <form className="account-form" onSubmit={async (event) => {
-        event.preventDefault(); setPrivacySaving(true); setPrivacyError(""); setPrivacyMessage("");
-        try {
-          await api("/api/me/profile/visibility", token, { method: "PATCH", body: JSON.stringify({ visibility }) });
-          setPrivacyMessage("Privacy saved."); onSaved();
-        } catch (err) { setPrivacyError(err instanceof Error ? err.message : "Could not update privacy."); }
-        finally { setPrivacySaving(false); }
-      }}>
-        <label htmlFor="profile-visibility">Profile privacy</label>
-        <select id="profile-visibility" value={visibility} onChange={event => setVisibility(event.target.value as "public" | "private")}>
-          <option value="private">Private</option><option value="public">Public</option>
-        </select>
-        <p className="muted small">Making your profile public automatically approves pending follow requests.</p>
-        {privacyError && <p className="form-error" role="alert">{privacyError}</p>}
-        {privacyMessage && <p role="status">{privacyMessage}</p>}
-        <button type="submit" className="secondary" disabled={privacySaving}>Save privacy</button>
-      </form>
+    <section className="profile-editor">
+      <h2>Edit profile</h2>
+      <p className="muted profile-editor-intro">Make yourself at home. Choose how you appear to other members.</p>
       <form onSubmit={submit} className="account-form">
         <label htmlFor="profile-name">Display name</label>
         <input
@@ -256,6 +264,23 @@ function ProfileSettings({
         <button className="secondary" type="button" onClick={onOpenAccount}>
           Manage preferences
         </button>
+      </form>
+      <form className="account-form" onSubmit={async (event) => {
+        event.preventDefault(); setPrivacySaving(true); setPrivacyError(""); setPrivacyMessage("");
+        try {
+          await api("/api/me/profile/visibility", token, { method: "PATCH", body: JSON.stringify({ visibility }) });
+          setPrivacyMessage("Privacy saved."); onSaved();
+        } catch (err) { setPrivacyError(err instanceof Error ? err.message : "Could not update privacy."); }
+        finally { setPrivacySaving(false); }
+      }}>
+        <label htmlFor="profile-visibility">Profile privacy</label>
+        <select id="profile-visibility" value={visibility} onChange={event => setVisibility(event.target.value as "public" | "private")}>
+          <option value="private">Private</option><option value="public">Public</option>
+        </select>
+        <p className="muted small">Making your profile public automatically approves pending follow requests.</p>
+        {privacyError && <p className="form-error" role="alert">{privacyError}</p>}
+        {privacyMessage && <p role="status">{privacyMessage}</p>}
+        <button type="submit" className="secondary" disabled={privacySaving}>Save privacy</button>
       </form>
     </section>
   );
