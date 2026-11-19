@@ -69,7 +69,7 @@ def shape_post(row: dict) -> dict:
         "title_name": row["title_name"],
         "poster_path": row["poster_path"],
         "release_date": row["release_date"],
-        "rating": row["rating"],
+        "rating": float(row["rating"]),
         "review": row["review"],
         "created_at": row["created_at"].isoformat(),
         "updated_at": row["updated_at"].isoformat(),
