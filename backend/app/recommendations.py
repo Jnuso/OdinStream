@@ -13,13 +13,14 @@ small thread pool, so a page load cannot turn into a long sequential crawl.
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from typing import Iterable
+from functools import partial
+from typing import Iterable, Sequence
 
 from fastapi import APIRouter, Depends, Query
 
 from app.accounts import current_user, preference_store
 from app.auth import AuthenticatedUser
-from app.catalog import summarize, tmdb_get
+from app.catalog import SERVICE_IDS, summarize, tmdb_get
 from app.errors import APIError
 from app.library import PostgresLibraryStore, library_store
 from app.preferences import PostgresPreferenceStore
@@ -61,43 +62,54 @@ def genre_requests(genres: list[str]) -> list[tuple[str, str, int]]:
     return requests[:MAX_TMDB_CALLS]
 
 
-def fetch_genre_page(request: tuple[str, str, int]) -> tuple[str, str, dict] | None:
+def fetch_discover_page(request: tuple[str, str, int | None], providers: str) -> tuple[str, str, dict] | None:
     """Fetch one discover page; a failed page is skipped rather than fatal."""
     media_type, genre, genre_id = request
+    params: dict[str, str | int] = {"sort_by": "popularity.desc", "vote_count.gte": 50, "include_adult": "false"}
+    if genre_id is not None:
+        params["with_genres"] = genre_id
+    if providers:
+        params.update(watch_region="US", with_watch_providers=providers, with_watch_monetization_types="flatrate")
     try:
-        data = tmdb_get(f"/discover/{media_type}", {
-            "with_genres": genre_id,
-            "sort_by": "popularity.desc",
-            "vote_count.gte": 50,
-            "include_adult": "false",
-        })
+        data = tmdb_get(f"/discover/{media_type}", params)
     except APIError:
         return None
     return media_type, genre, data if isinstance(data, dict) else {}
 
 
-def fetch_genre_pages(requests: list[tuple[str, str, int]]) -> list[tuple[str, str, dict]]:
+def fetch_discover_pages(requests: Sequence[tuple[str, str, int | None]], providers: str) -> list[tuple[str, str, dict]]:
     if not requests:
         return []
     with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(requests))) as pool:
-        pages = list(pool.map(fetch_genre_page, requests))
+        pages = list(pool.map(partial(fetch_discover_page, providers=providers), requests))
     return [page for page in pages if page is not None]
 
 
 @router.get("/recommendations")
 def read_recommendations(limit: int = Query(default=12, ge=1, le=20),
+                         streaming_only: bool = False,
                          user: AuthenticatedUser = Depends(current_user),
                          preferences: PostgresPreferenceStore = Depends(preference_store),
                          library: PostgresLibraryStore = Depends(library_store)) -> dict:
-    genres = preferences.get(user.id)["favorite_genres"]
+    choices = preferences.get(user.id)
+    genres = choices["favorite_genres"]
+    providers = ""
+    if streaming_only:
+        provider_ids = {provider for service in choices["streaming_services"] for provider in SERVICE_IDS.get(service, set())}
+        if not provider_ids:
+            raise APIError(422, "no_streaming_services", "Choose streaming services in Account before filtering.")
+        providers = "|".join(map(str, sorted(provider_ids)))
     excluded = excluded_titles(library.list(user.id, None, None))
 
     scores: dict[tuple[str, int], int] = {}
     candidates: dict[tuple[str, int], dict] = {}
     reasons: dict[tuple[str, int], str] = {}
 
-    if genres:
-        pages = fetch_genre_pages(genre_requests(genres))
+    if genres or providers:
+        requests: Sequence[tuple[str, str, int | None]] = genre_requests(genres) if genres else [
+            ("movie", "", None), ("tv", "", None),
+        ]
+        pages = fetch_discover_pages(requests, providers)
         if not pages:
             raise APIError(503, "recommendations_unavailable",
                            "Recommendations are unavailable right now. Try again.")
@@ -110,8 +122,9 @@ def read_recommendations(limit: int = Query(default=12, ge=1, le=20),
                     continue
                 scores[key] = scores.get(key, 0) + 1
                 candidates.setdefault(key, item)
-                reasons.setdefault(key, genre)
-        basis = "genres"
+                if genre:
+                    reasons.setdefault(key, genre)
+        basis = "genres" if genres else "popular"
     else:
         data = tmdb_get("/trending/all/week")
         for item in data.get("results", []):

@@ -15,11 +15,12 @@ from app.settings import Settings, get_settings
 
 
 class FakePreferences:
-    def __init__(self, genres):
+    def __init__(self, genres, services=()):
         self.genres = genres
+        self.services = services
 
     def get(self, user_id):
-        return {"favorite_genres": list(self.genres), "streaming_services": []}
+        return {"favorite_genres": list(self.genres), "streaming_services": list(self.services)}
 
 
 class FakeLibrary:
@@ -68,6 +69,21 @@ class RecommendationTest(unittest.TestCase):
         self.assertEqual(body["basis"], "genres")
         self.assertEqual(len(body["items"]), 3)
         self.assertTrue(all(item["reason"] == "Drama" for item in body["items"]))
+
+    def test_streaming_filter_uses_saved_providers_with_and_without_genres(self):
+        for genres in ([], ["Drama"]):
+            with self.subTest(genres=genres):
+                app.dependency_overrides[preference_store] = lambda: FakePreferences(genres, ["Netflix", "Max"])
+                app.dependency_overrides[library_store] = lambda: FakeLibrary([])
+                with patch("app.recommendations.tmdb_get", return_value={"results": []}) as tmdb:
+                    response = self.client.get("/api/me/recommendations?streaming_only=true", headers=self.headers())
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual({call.args[0] for call in tmdb.call_args_list}, {"/discover/movie", "/discover/tv"})
+                for _, params in (call.args for call in tmdb.call_args_list):
+                    self.assertEqual(params["with_watch_providers"], "8|384|1899")
+                    self.assertEqual(params["watch_region"], "US")
+                    self.assertEqual(params["with_watch_monetization_types"], "flatrate")
+                    self.assertEqual("with_genres" in params, bool(genres))
 
     def test_watched_and_completed_titles_are_excluded(self):
         results = lambda path: discover_result([1, 2] if path.endswith("movie") else [3], path.split("/")[-1])

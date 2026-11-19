@@ -102,7 +102,10 @@ export default function Profile({
 
   return (
     <div className="profile-page">
-      {isSelf && <div className="profile-toolbar"><button className="secondary" onClick={() => setEditingTarget(target)}>Edit profile</button></div>}
+      <div className={`profile-toolbar${isSelf ? "" : " profile-toolbar-read-only"}`}>
+        <span className="desktop-profile-label" aria-hidden="true">Profile</span>
+        {isSelf && <button className="secondary" onClick={() => setEditingTarget(target)}>Edit profile</button>}
+      </div>
       <section className="profile-header" aria-label={`${profile.display_name} profile`}>
         <span className={`avatar ${avatarColor(profile.id)} large-avatar`}>
           {initials(profile.display_name)}

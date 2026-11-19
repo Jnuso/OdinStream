@@ -108,8 +108,9 @@ export async function setFollow(token: string, profileId: string, follow: boolea
   await api<void>(`/api/profiles/${profileId}/follow`, token, { method: follow ? "PUT" : "DELETE" });
 }
 
-export async function fetchRecommendations(token: string): Promise<{ items: Recommendation[]; basis: string }> {
-  return api<{ items: Recommendation[]; basis: string }>("/api/me/recommendations", token);
+export async function fetchRecommendations(token: string, streamingOnly = false): Promise<{ items: Recommendation[]; basis: string }> {
+  const query = streamingOnly ? "?streaming_only=true" : "";
+  return api<{ items: Recommendation[]; basis: string }>(`/api/me/recommendations${query}`, token);
 }
 
 
