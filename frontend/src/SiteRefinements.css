@@ -48,9 +48,6 @@
 .recommendation-grid .poster-image, .recommendation-grid .poster-fallback { width: 100%; max-width: none; height: auto; aspect-ratio: 2 / 3; border-radius: 8px; }
 .discover-result { min-width: 0; align-items: center; transition: transform .15s, border-color .15s; }
 .discover-result:hover { border-color: #d5eaa260; }
-.title-loading-indicator { position: fixed; inset: 0 0 auto; height: 3px; background: #d5eaa210; z-index: 50; overflow: hidden; }
-.title-loading-indicator > span:first-child { display: block; width: 35%; height: 100%; background: var(--accent); animation: title-progress 1.4s ease-in-out infinite; }
-@keyframes title-progress { from { transform: translateX(-100%); } to { transform: translateX(390%); } }
 .discover-result > span { min-width: 0; }
 .discover-result strong { font-size: 14px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
 .discover-result small { font-size: 12px; line-height: 1.6; margin-top: 5px; color: #9da992; }
@@ -257,7 +254,6 @@ footer { font-size: 11px; color: #87947b; line-height: 1.7; }
   .library-entry > .secondary { padding: 9px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .title-loading-indicator > span:first-child { animation: none; width: 100%; opacity: .6; }
   .discover-result { transition: none; }
   .recommendation-grid .discover-result:hover { transform: none; }
 }

@@ -22,6 +22,7 @@ import Feed from "./components/Feed";
 import Library from "./components/Library";
 import PostComposer from "./components/PostComposer";
 import ProfileScreen from "./components/Profile";
+import TitleDetails from "./components/TitleDetails";
 import NavIcon from "./components/NavIcon";
 import "./App.css";
 import "./SiteRefinements.css";
@@ -114,7 +115,6 @@ export default function App() {
   const openProfile = (id: string) => navigate({ page: "profile", feed, profileId: id });
   const openTitle = (mediaType: MediaType, id: number) => {
     setFocus({ media_type: mediaType, id });
-    navigate({ page: "discover", feed, profileId });
   };
   const refresh = () => setReloadKey((value) => value + 1);
   const requests = useFollowRequests(token, viewerId, !!token && setup?.id === viewerId && setup.status === "ready", reloadKey, refresh);
@@ -238,7 +238,7 @@ export default function App() {
         </header>
         <main id="main" tabIndex={-1}>
           {page === "discover" ? (
-            <Discover token={token} focus={focus} onFocusHandled={() => setFocus(null)} onReview={title => { setReviewTitle(title); setComposer("new"); }} onOpenProfile={openProfile} onEdit={setComposer} viewerId={viewerId} reloadKey={reloadKey} />
+            <Discover token={token} onOpenTitle={openTitle} />
           ) : page === "library" ? (
             <Library key={viewerId || "signed-out"} token={token} onOpenTitle={openTitle} />
           ) : page === "account" ? (
@@ -329,6 +329,7 @@ export default function App() {
         ))}
         <button onClick={startComposer}><NavIcon name="plus" /><span>New post</span></button>
       </nav>
+      {focus && <TitleDetails key={`${focus.media_type}:${focus.id}`} selection={focus} token={token} viewerId={viewerId} reloadKey={reloadKey} onClose={() => setFocus(null)} onReview={title => { setReviewTitle(title); setComposer("new"); }} onOpenProfile={openProfile} onEdit={setComposer} onOpenTitle={openTitle} />}
       {composer && token && (
         <PostComposer
           token={token}
