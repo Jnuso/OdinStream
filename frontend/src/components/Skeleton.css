@@ -1,0 +1,30 @@
+.skeleton { margin: 8px 0 24px; }
+.skeleton-content { animation: skeleton-appear .18s .15s both; }
+.skeleton-bone { display: block; background: #ffffff09; border-radius: 5px; animation: skeleton-breathe 2s ease-in-out infinite; }
+.skeleton-item { min-width: 0; }
+.skeleton-lines { display: grid; gap: 12px; flex: 1; min-width: 0; }
+.skeleton-line { height: 12px; width: 85%; }
+.skeleton-line.short { width: 55%; height: 10px; }
+.skeleton-row { display: flex; gap: 18px; align-items: center; }
+.skeleton-avatar { width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; }
+.skeleton-author { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; max-width: 220px; }
+.skeleton-poster { width: 72px; aspect-ratio: 2 / 3; flex-shrink: 0; }
+.skeleton-posts .skeleton-content, .skeleton-rows .skeleton-content, .skeleton-episodes .skeleton-content { display: grid; gap: 16px; }
+.skeleton-posts .skeleton-item, .skeleton-rows .skeleton-item, .skeleton-profile .skeleton-item { padding: 22px; border: 1px solid #ffffff0b; background: #191e19; border-radius: 10px; }
+.skeleton-posters .skeleton-content { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 18px; }
+.skeleton-posters .skeleton-poster { width: 100%; margin-bottom: 15px; border-radius: 8px; }
+.skeleton-rows .skeleton-poster { width: 46px; }
+.skeleton-episodes .skeleton-item { padding: 10px 0; border-bottom: 1px solid #ffffff0b; }
+.skeleton-episodes .skeleton-poster { width: 17px; height: 17px; }
+.skeleton-profile .skeleton-avatar { width: 88px; height: 88px; }
+.skeleton-profile-stats { display: flex; gap: 24px; margin-top: 24px; }
+.skeleton-profile-stats > span { width: 65px; height: 28px; }
+.skeleton-chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 24px 0 30px; }
+.skeleton-chips > span { width: 100px; height: 40px; border-radius: 8px; }
+.skeleton-submit { width: 140px; height: 44px; margin-top: 25px; }
+@keyframes skeleton-appear { from { opacity: 0; } to { opacity: 1; } }
+@keyframes skeleton-breathe { 0%, 100% { background-color: #ffffff08; } 50% { background-color: #ffffff10; } }
+@media (max-width: 1200px) { .skeleton-posters .skeleton-content { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .skeleton-posters .skeleton-content { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; } }
+@media (max-width: 400px) { .skeleton-posters .skeleton-content { grid-template-columns: repeat(2, minmax(0, 1fr)); } .skeleton-posts .skeleton-item { padding: 16px; } .skeleton-profile .skeleton-avatar { width: 64px; height: 64px; } }
+@media (prefers-reduced-motion: reduce) { .skeleton-content, .skeleton-bone { animation: none; } }

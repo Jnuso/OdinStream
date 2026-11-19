@@ -7,6 +7,13 @@
   -webkit-font-smoothing: antialiased;
   font-weight: 400;
   color-scheme: dark;
+  --canvas: #101211;
+  --surface: #191e19;
+  --ink: #efeee8;
+  --muted: #a5b098;
+  --line: #ffffff14;
+  --accent: #d5eaa2;
+  --accent-soft: #d5eaa210;
 }
 * {
   box-sizing: border-box;
@@ -16,7 +23,8 @@ body {
 }
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 button,

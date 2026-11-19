@@ -4,10 +4,12 @@ export default function Modal({
   label,
   onClose,
   children,
+  className,
 }: {
   label: string;
   onClose: () => void;
   children: ReactNode;
+  className?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -18,6 +20,7 @@ export default function Modal({
   return (
     <dialog
       ref={dialog}
+      className={className}
       aria-label={label}
       onCancel={onClose}
       onClick={(event) => {
