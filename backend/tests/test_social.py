@@ -1,6 +1,7 @@
 import time
 import unittest
 from datetime import datetime, timezone
+from decimal import Decimal
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -113,6 +114,20 @@ class SocialTest(unittest.TestCase):
                                                         "poster_path": "/poster.jpg", "release_date": "1999-03-31"}):
             return self.client.post("/api/titles/movie/603/posts", headers=self.headers(user),
                                     json={"rating": rating, "review": review})
+
+    def test_database_decimal_ratings_are_json_numbers(self):
+        self.assertEqual(self.publish(self.user_a, rating=4.5).status_code, 201)
+        row = next(iter(self.store.posts.values()))
+        # PostgreSQL NUMERIC values arrive through psycopg as Decimal.
+        row["rating"] = Decimal("4.5")
+        self.assertIsInstance(shape_post(row)["rating"], float)
+        for path in ("/api/feed", f"/api/profiles/{self.user_a}/posts", "/api/titles/movie/603/posts"):
+            with self.subTest(path=path):
+                response = self.client.get(path, headers=self.headers(self.user_a))
+                self.assertEqual(response.status_code, 200)
+                rating = response.json()["items"][0]["rating"]
+                self.assertIsInstance(rating, (int, float))
+                self.assertEqual(rating, 4.5)
 
     def test_requires_auth(self):
         self.assertEqual(self.client.get("/api/feed").status_code, 401)
