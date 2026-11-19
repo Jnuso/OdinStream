@@ -7,6 +7,6 @@ Status: draft for review. These documents prepare the initial task list; Kanban 
 - [User stories and acceptance criteria](user-stories.md): reviewable outcomes to turn into implementation work.
 - [Draft project backlog](project-backlog.md): a complete starting list for review before creating Trello cards.
 - [Delivery and collaboration](delivery-and-collaboration.md): proposed dependencies, verification, and team workflow.
-- [Screen sketches](https://www.figma.com/design/ma8S3CmWx675i5hsZFCk2k): editable mobile sketches with navigation between the five screens. The sketches are illustrative; their controls are not a functioning application.
+- [Design references](design/README.md): the selected desktop prototype, mobile sketches, and implementation guidance.
 
 The original proposal and presentation are in this folder. They differ on some social features, assignments, and dates; the scope document records later decisions separately from items still needing agreement. Review the documents together before creating or assigning tasks.
