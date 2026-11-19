@@ -16,7 +16,7 @@ describe("account setup", () => {
     expect(form.checkValidity()).toBe(false);
     fireEvent.change(username, { target: { value: "Jack" } });
     expect(form.checkValidity()).toBe(false);
-    fireEvent.click(screen.getByLabelText(/Private —/));
+    fireEvent.click(screen.getByRole("radio", { name: /^Private/ }));
     fireEvent.click(screen.getByLabelText(/Comedy/));
     expect(form.checkValidity()).toBe(true);
     fireEvent.submit(form);
@@ -29,7 +29,7 @@ describe("account setup", () => {
     const complete = vi.fn();
     render(<Setup token="token" onComplete={complete} onSignOut={() => {}} />);
     fireEvent.change(screen.getByLabelText("Username (required)"), { target: { value: "jack" } });
-    fireEvent.click(screen.getByLabelText(/Public —/));
+    fireEvent.click(screen.getByRole("radio", { name: /^Public/ }));
     fireEvent.submit(screen.getByLabelText("Username (required)").closest("form")!);
     expect((await screen.findByRole("alert")).textContent).toContain("already taken");
     expect(complete).not.toHaveBeenCalled();

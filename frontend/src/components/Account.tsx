@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../data/auth";
 import { api } from "../data/api";
+import Skeleton from "./Skeleton";
 
 type Preferences = { favorite_genres: string[]; streaming_services: string[] };
 const preferenceOptions = {
@@ -61,7 +62,7 @@ function AccountPreferences({ token }: { token: string }) {
       </form>);
   else content = error
     ? <button className="secondary" onClick={() => setReload(value => value + 1)}>Retry loading preferences</button>
-    : <p role="status">Loading preferences…</p>;
+    : <Skeleton label="Loading preferences…" variant="form" />;
   return <section className="account-preferences preferences"><h2>Account preferences</h2>
     {error && <p className="form-error" role="alert">{error}</p>}
     {content}
@@ -120,12 +121,12 @@ export default function Account({ session, recovery, callbackError, onClearCallb
     finally { setBusy(false); }
   }
 
-  if (session && mode !== "recovery") return <section><h1>Account</h1>{callbackError && <p className="form-error" role="alert">{callbackError}</p>}<p>Signed in as {session.user.email}</p><button className="secondary" onClick={async () => {
+  if (session && mode !== "recovery") return <section className="account-page"><div className="page-heading"><div><h1>Account</h1><p>Your preferences and sign-in details, all in one place.</p></div></div>{callbackError && <p className="form-error" role="alert">{callbackError}</p>}<div className="account-summary"><div><h2>Signed in</h2><p>{session.user.email}</p></div><button className="secondary" onClick={async () => {
     const { error } = await client.auth.signOut();
     if (error) setError(error.message);
-  }}>Sign out</button>{error && <p className="form-error" role="alert">{error}</p>}<AccountPreferences key={session.user.id} token={session.access_token} /></section>;
+  }}>Sign out</button></div>{error && <p className="form-error" role="alert">{error}</p>}<AccountPreferences key={session.user.id} token={session.access_token} /></section>;
 
-  return <section><h1>{mode === "signup" ? "Create account" : mode === "reset" ? "Reset password" : mode === "recovery" ? "Choose a new password" : "Sign in"}</h1>
+  return <section className="account-page account-auth"><span className="eyebrow">Your next watch starts here</span><h1>{mode === "signup" ? "Create account" : mode === "reset" ? "Reset password" : mode === "recovery" ? "Choose a new password" : "Welcome back"}</h1><p className="muted">{mode === "signup" ? "Save your favorites and share what’s worth watching." : mode === "signin" ? "Sign in to your library, reviews, and recommendations." : "Let’s get you back into your account."}</p>
     <form className="composer account-form" onSubmit={submit}>
       {mode !== "recovery" && <><label htmlFor="account-email">Email</label><input id="account-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="email" /></>}
       {mode !== "reset" && <><label htmlFor="account-password">Password</label><input id="account-password" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={mode === "signin" ? 1 : 8} autoComplete={mode === "signin" ? "current-password" : "new-password"} /></>}
