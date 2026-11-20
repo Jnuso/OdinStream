@@ -27,6 +27,7 @@ import NavIcon from "./components/NavIcon";
 import "./App.css";
 import "./SiteRefinements.css";
 import "./DesktopPrototype.css";
+import "./RetroVideoStore.css";
 import FollowRequests, { RequestBadge } from "./components/FollowRequests";
 import { useFollowRequests } from "./data/useFollowRequests";
 

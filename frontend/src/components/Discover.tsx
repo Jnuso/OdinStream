@@ -150,6 +150,8 @@ export default function Discover({
     return () => { active = false; };
   }, [showTrending]);
 
+  const featured = submittedQuery ? undefined : trending[0];
+
   return (
     <section className="discover-page">
       <div className="discover-header">
@@ -188,6 +190,22 @@ export default function Discover({
         </button>
         {onOpenAccount && <button className="secondary" onClick={onOpenAccount}>Manage services</button>}
       </div>
+      {featured && (
+        <section className="discover-feature" aria-labelledby="discover-feature-title">
+          {featured.backdrop_path && (
+            <img className="discover-feature-art" src={`https://image.tmdb.org/t/p/w780${featured.backdrop_path}`} alt="" />
+          )}
+          <div className="discover-feature-copy">
+            <p className="discover-feature-label">Featured this week</p>
+            <h2 id="discover-feature-title">{featured.name}</h2>
+            <p>{featured.media_type === "tv" ? "TV show" : "Movie"}{formatYear(featured.release_date) && ` · ${formatYear(featured.release_date)}`}</p>
+            {featured.overview && <p className="discover-feature-overview">{featured.overview}</p>}
+            <button className="primary" type="button" onClick={() => openTitle(featured.media_type, featured.id)}>
+              View details
+            </button>
+          </div>
+        </section>
+      )}
       {token && !submittedQuery && (
         <section className="recommendations" aria-label="Recommended titles">
           <div className="section-heading">
@@ -223,11 +241,11 @@ export default function Discover({
           )}
         </section>
       )}
-      {!submittedQuery && trending.length > 0 && (
+      {!submittedQuery && trending.length > 1 && (
         <section className="recommendations trending" aria-label="Trending titles">
           <div className="section-heading"><h2>Trending this week</h2></div>
           <div className="discover-results recommendation-grid">
-            {trending.map(item => (
+            {trending.slice(1).map(item => (
               <button key={`${item.media_type}-${item.id}`} className="discover-result" onClick={() => openTitle(item.media_type, item.id)}>
                 <Poster name={item.name} posterPath={item.backdrop_path || item.poster_path} size="w342" />
                 <strong>{item.name}</strong>
