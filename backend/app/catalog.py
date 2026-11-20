@@ -123,15 +123,31 @@ def summarize(item: dict, media_type: str) -> dict:
     }
 
 
+@router.get("/trending")
+def trending() -> dict:
+    data = tmdb_get("/trending/all/week")
+    titles = [
+        {**summarize(item, item["media_type"]), "backdrop_path": item.get("backdrop_path")}
+        for item in data.get("results", [])
+        if isinstance(item, dict)
+        and item.get("media_type") in ("movie", "tv")
+        and item.get("id") is not None
+        and not item.get("adult")
+    ]
+    return {"items": titles[:6]}
+
+
 @router.get("/search")
-def search(query: str = Query(min_length=1, max_length=200), page: int = Query(default=1, ge=1, le=500)) -> dict:
+def search(query: str = Query(min_length=1, max_length=200),
+           page: int = Query(default=1, ge=1, le=500),
+           media_type: Literal["movie", "tv"] | None = None) -> dict:
     query = query.strip()
     if not query:
         raise APIError(422, "invalid_query", "Enter a title to search.")
-    data = tmdb_get("/search/multi", {"query": query, "page": page, "include_adult": "false"})
+    data = tmdb_get(f"/search/{media_type or 'multi'}", {"query": query, "page": page, "include_adult": "false"})
     return {
-        "items": [summarize(item, item["media_type"]) for item in data.get("results", [])
-                  if isinstance(item, dict) and item.get("media_type") in ("movie", "tv")],
+        "items": [summarize(item, media_type or item["media_type"]) for item in data.get("results", [])
+                  if isinstance(item, dict) and (media_type or item.get("media_type") in ("movie", "tv"))],
         "page": data.get("page", page),
         "total_pages": data.get("total_pages", 0),
     }
@@ -140,11 +156,12 @@ def search(query: str = Query(min_length=1, max_length=200), page: int = Query(d
 @filtered_router.get("/search")
 def search_available(query: str = Query(min_length=1, max_length=200), page: int = Query(default=1, ge=1, le=500),
                      user: AuthenticatedUser = Depends(current_user),
-                     preferences: PreferenceStore = Depends(preference_store)) -> dict:
+                     preferences: PreferenceStore = Depends(preference_store),
+                     media_type: Literal["movie", "tv"] | None = None) -> dict:
     selected = preferences.get(user.id)["streaming_services"]
     if not selected:
         raise APIError(422, "no_streaming_services", "Choose streaming services in Account before filtering.")
-    data = search(query, page)
+    data = search(query, page, media_type)
 
     def available(item: dict) -> bool:
         providers = tmdb_get(f"/{item['media_type']}/{item['id']}/watch/providers")

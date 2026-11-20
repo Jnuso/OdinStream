@@ -1,12 +1,15 @@
+import base64
 import time
 import unittest
 from datetime import datetime, timezone
 from decimal import Decimal
+from io import BytesIO
 from unittest.mock import patch
 from uuid import uuid4
 
 import jwt
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from app.errors import APIError
 from app.main import app
@@ -21,6 +24,13 @@ class FakeStore:
         self.posts = {}
         self.follows = set()
         self.profiles = {}
+        self.pictures = {}
+
+    def profile_picture(self, viewer_id, profile_id):
+        return self.pictures.get(profile_id)
+
+    def update_profile_picture(self, user_id, picture):
+        self.pictures[user_id] = picture
 
     def profile(self, viewer_id, profile_id):
         row = self.profiles.get(profile_id)
@@ -114,6 +124,42 @@ class SocialTest(unittest.TestCase):
                                                         "poster_path": "/poster.jpg", "release_date": "1999-03-31"}):
             return self.client.post("/api/titles/movie/603/posts", headers=self.headers(user),
                                     json={"rating": rating, "review": review})
+
+    def test_profile_picture_requires_auth_and_replaces_only_the_callers_picture(self):
+        upload = "/api/me/profile/picture"
+        own = f"/api/profiles/{self.user_a}/picture"
+        other = f"/api/profiles/{self.user_b}/picture"
+        headers = self.headers(self.user_a)
+        self.assertEqual(self.client.get(own, headers=headers).status_code, 404)
+        self.assertEqual(self.client.put(upload, json={"jpeg": "/9j//9k="}).status_code, 401)
+        saved = []
+        for color in ("red", "blue"):
+            exif = Image.Exif()
+            exif[0x013B] = "private author"
+            source = BytesIO()
+            Image.new("RGB", (16, 16), color).save(
+                source, format="JPEG", exif=exif, comment=b"private comment",
+                icc_profile=b"private profile", xmp=b"private XMP",
+            )
+            uploaded = source.getvalue() + b"private trailer"
+            jpeg = base64.b64encode(uploaded).decode("ascii")
+            self.assertEqual(self.client.put(upload, headers=headers, json={"jpeg": jpeg}).status_code, 204)
+            result = self.client.get(own, headers=self.headers(self.user_b))
+            self.assertEqual(result.status_code, 200)
+            stored = base64.b64decode(result.json()["jpeg"])
+            self.assertEqual(self.store.pictures[self.user_a], stored)
+            self.assertNotIn(b"private", stored)
+            with Image.open(BytesIO(stored)) as photo:
+                self.assertEqual(photo.size, (16, 16))
+                self.assertFalse(photo.getexif())
+                self.assertTrue({"comment", "icc_profile", "xmp"}.isdisjoint(photo.info))
+            saved.append(stored)
+        self.assertNotEqual(*saved)
+        self.assertEqual(self.client.get(own).status_code, 401)
+        self.assertEqual(self.client.get(other, headers=headers).status_code, 404)
+        for invalid in ("invalid!", "/9j//9k="):
+            self.assertEqual(self.client.put(upload, headers=headers, json={"jpeg": invalid}).status_code, 422)
+        self.assertEqual(self.store.pictures[self.user_a], saved[-1])
 
     def test_database_decimal_ratings_are_json_numbers(self):
         self.assertEqual(self.publish(self.user_a, rating=4.5).status_code, 201)

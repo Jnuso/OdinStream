@@ -134,64 +134,66 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
               </p>
               {detail.genres.length > 0 && <p>{detail.genres.join(" · ")}</p>}
               <p>{detail.overview || "No description available."}</p>
+            <div className="discover-save">
+              {token ? (
+                <>
+                {currentLibraryCheck?.error ? <button className="secondary" onClick={() => { setLibraryCheck(null); setLibraryRetry(value => value + 1); }}>Retry library check</button> : <button className={currentLibraryCheck?.status ? "secondary" : "primary"} disabled={saving || !currentLibraryCheck || !!currentLibraryCheck.status} onClick={saveTitle}>
+                  {saving ? "Adding…" : !currentLibraryCheck ? "Checking library…" : currentLibraryCheck.status === "watchlist" ? "✓ In your watchlist" : currentLibraryCheck.status ? ({ watching: "Watching", watched: "Watched", completed: "Completed", paused: "Paused", dropped: "Dropped" }[currentLibraryCheck.status] ?? "In your library") : "Add to watchlist"}
+                </button>}
+                {onReview && <button className="secondary" onClick={() => {
+                  const own = reviewPosts?.find(post => post.author.id === viewerId);
+                  if (own && onEdit) onEdit(own); else onReview(detail);
+                }}>{onEdit && reviewPosts?.some(post => post.author.id === viewerId) ? "Edit your review" : "Write a review"}</button>}
+                </>
+              ) : (
+                <p>Sign in from Account to save this title.</p>
+              )}
+              {saveMessage && <p role="status">{saveMessage}</p>}
+              {currentLibraryCheck?.error && <p className="form-error" role="alert">{currentLibraryCheck.error}</p>}
+            </div>
             </div>
           </div>
-          <div className="discover-save">
-            {token ? (
-              <>
-              {currentLibraryCheck?.error ? <button className="secondary" onClick={() => { setLibraryCheck(null); setLibraryRetry(value => value + 1); }}>Retry library check</button> : <button className={currentLibraryCheck?.status ? "secondary" : "primary"} disabled={saving || !currentLibraryCheck || !!currentLibraryCheck.status} onClick={saveTitle}>
-                {saving ? "Adding…" : !currentLibraryCheck ? "Checking library…" : currentLibraryCheck.status === "watchlist" ? "✓ In your watchlist" : currentLibraryCheck.status ? ({ watching: "Watching", watched: "Watched", completed: "Completed", paused: "Paused", dropped: "Dropped" }[currentLibraryCheck.status] ?? "In your library") : "Add to watchlist"}
-              </button>}
-              {onReview && <button className="secondary" onClick={() => {
-                const own = reviewPosts?.find(post => post.author.id === viewerId);
-                if (own && onEdit) onEdit(own); else onReview(detail);
-              }}>{onEdit && reviewPosts?.some(post => post.author.id === viewerId) ? "Edit your review" : "Write a review"}</button>}
-              </>
-            ) : (
-              <p>Sign in from Account to save this title.</p>
-            )}
-            {saveMessage && <p role="status">{saveMessage}</p>}
-            {currentLibraryCheck?.error && <p className="form-error" role="alert">{currentLibraryCheck.error}</p>}
-          </div>
-          <section className="discover-watch">
-            <h3>Where to watch in the United States</h3>
-            {([
-              ["flatrate", "Stream"],
-              ["rent", "Rent"],
-              ["buy", "Buy"],
-            ] as const).map(
-              ([key, label]) =>
-                detail.availability[key].length > 0 && (
-                  <p key={key}>
-                    <strong>{label}:</strong> {detail.availability[key].join(", ")}
-                  </p>
-                ),
-            )}
-            {!detail.availability.flatrate.length &&
-              !detail.availability.rent.length &&
-              !detail.availability.buy.length && (
-                <p>Availability information is not available for this country.</p>
+          <div className="title-detail-panels">
+            <section className="discover-watch">
+              <h3>Where to watch in the United States</h3>
+              {([
+                ["flatrate", "Stream"],
+                ["rent", "Rent"],
+                ["buy", "Buy"],
+              ] as const).map(
+                ([key, label]) =>
+                  detail.availability[key].length > 0 && (
+                    <p key={key}>
+                      <strong>{label}:</strong> {detail.availability[key].join(", ")}
+                    </p>
+                  ),
               )}
-            {detail.availability.link && (
-              <a href={detail.availability.link} target="_blank" rel="noreferrer">
-                View watch options on TMDB
-              </a>
-            )}
-            <p className="muted">Availability data provided by JustWatch.</p>
-          </section>
-          <section className="title-reviews">
-            <h3>Ratings &amp; reviews</h3>
-            {!token ? <p className="muted">Sign in to read and share reviews.</p>
-              : reviewError ? <p className="form-error" role="alert">{reviewError}</p>
-              : reviewPosts === null ? <Skeleton label="Loading reviews…" variant="posts" count={2} />
-              : reviewPosts.length === 0 ? <p className="muted">No reviews yet. Share what you thought.</p>
-              : <div className="post-list">{reviewPosts.map(post => (
-                <PostCard key={post.id} post={post} isOwn={false}
-                  onOpenProfile={id => { onClose(); onOpenProfile?.(id); }}
-                  onOpenTitle={onOpenTitle}
-                  onEdit={() => {}} onDelete={() => {}} />
-              ))}</div>}
-          </section>
+              {!detail.availability.flatrate.length &&
+                !detail.availability.rent.length &&
+                !detail.availability.buy.length && (
+                  <p>Availability information is not available for this country.</p>
+                )}
+              {detail.availability.link && (
+                <a href={detail.availability.link} target="_blank" rel="noreferrer">
+                  View watch options on TMDB
+                </a>
+              )}
+              <p className="muted">Availability data provided by JustWatch.</p>
+            </section>
+            <section className="title-reviews">
+              <h3>Ratings &amp; reviews</h3>
+              {!token ? <p className="muted">Sign in to read and share reviews.</p>
+                : reviewError ? <p className="form-error" role="alert">{reviewError}</p>
+                : reviewPosts === null ? <Skeleton label="Loading reviews…" variant="posts" count={2} />
+                : reviewPosts.length === 0 ? <p className="muted">No reviews yet. Share what you thought.</p>
+                : <div className="post-list">{reviewPosts.map(post => (
+                  <PostCard key={post.id} post={post} isOwn={false}
+                    onOpenProfile={id => { onClose(); onOpenProfile?.(id); }}
+                    onOpenTitle={onOpenTitle}
+                    onEdit={() => {}} onDelete={() => {}} />
+                ))}</div>}
+            </section>
+          </div>
           {detail.seasons.length > 0 && (
             <section className="discover-seasons">
               <h3>Seasons</h3>

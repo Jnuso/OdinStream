@@ -93,7 +93,9 @@ export default function Library({ token, onOpenTitle }: { token: string | null; 
           {statuses[item.media_type].map(status => <option key={status} value={status}>{labels[status]}</option>)}</select></label>
         {item.media_type === "tv" && <button className="secondary" aria-expanded={expanded === item.id} onClick={() => setExpanded(expanded === item.id ? null : item.id)}>Episode progress</button>}
         <button className="library-remove" aria-disabled={busy !== null} onClick={() => { if (!busy) setRemoving(item); }}>Remove</button>
-        {item.media_type === "tv" && <ShowProgress entry={item} token={token} expanded={expanded === item.id} />}
+        {item.media_type === "tv" && (item.status !== "completed" || expanded === item.id) && (
+          <ShowProgress entry={item} token={token} expanded={expanded === item.id} />
+        )}
       </article>)}</div>
       {nextOffset !== null && <button className="secondary" disabled={loading} onClick={() => void loadMore()}>{loading ? "Loading more…" : "Load more titles"}</button>}
       {nextOffset !== null && filter !== "all" && <p className="muted small">Filters apply to loaded titles. Load more to see additional matches.</p>}

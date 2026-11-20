@@ -33,6 +33,32 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual([(x["media_type"], x["name"]) for x in response.json()["items"]], [("movie", "A"), ("tv", "B")])
 
+    def test_trending_excludes_people_and_adult_titles(self):
+        movies = [
+            {"id": index, "media_type": "movie", "title": f"Movie {index}", "backdrop_path": "/wide.jpg"}
+            for index in range(10, 17)
+        ]
+        results = {"results": [
+            {"id": 1, "media_type": "person", "name": "Actor"},
+            {"id": 2, "media_type": "movie", "title": "Adult", "adult": True},
+            *movies,
+        ]}
+        with patch("app.catalog.tmdb_get", return_value=results) as fetch:
+            response = self.client.get("/api/catalog/trending")
+        fetch.assert_called_once_with("/trending/all/week")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["id"] for item in response.json()["items"]], list(range(10, 16)))
+        self.assertEqual(response.json()["items"][0]["backdrop_path"], "/wide.jpg")
+
+    def test_search_type_uses_the_matching_tmdb_endpoint(self):
+        results = {"results": [{"id": 1, "name": "A show"}], "page": 2, "total_pages": 3}
+        with patch("app.catalog.tmdb_get", return_value=results) as fetch:
+            response = self.client.get("/api/catalog/search?query=show&media_type=tv&page=2")
+        fetch.assert_called_once_with("/search/tv", {"query": "show", "page": 2, "include_adult": "false"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["items"][0]["media_type"], "tv")
+        self.assertEqual(response.json()["total_pages"], 3)
+
     def test_service_filter_uses_saved_subscriptions_and_pagination(self):
         secret = "test-secret-that-is-longer-than-32-characters"
         settings = Settings("https://example.supabase.co", secret, "", ())
