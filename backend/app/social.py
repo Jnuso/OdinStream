@@ -29,8 +29,9 @@ HANDLE = re.compile(r"^[A-Za-z0-9_.]{3,30}$")
 POST_COLUMNS = """post.id, post.media_type, post.tmdb_id, post.title_name, post.poster_path,
     post.release_date, post.rating, post.review, post.created_at, post.updated_at,
     author.user_id as author_id, author.display_name as author_name, author.handle as author_handle"""
+# Read optional picture metadata while the backend and database deploy separately.
 PROFILE_COLUMNS = """profile.user_id, profile.display_name, profile.handle,
-    profile.picture_jpeg is not null as has_picture,
+    (to_jsonb(profile)->>'picture_jpeg') is not null as has_picture,
     case when profile.visibility = 'private' and profile.user_id <> nullif(current_setting('app.user_id', true), '')::uuid
       and not exists(select 1 from public.follows f where f.follower_id = nullif(current_setting('app.user_id', true), '')::uuid and f.followee_id = profile.user_id and f.status = 'following')
       then '' else profile.bio end as bio, profile.visibility,

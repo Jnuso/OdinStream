@@ -223,7 +223,7 @@ export default function App() {
         <button className="primary new-post" onClick={startComposer}>
           <NavIcon name="plus" /> New post
         </button>
-        {me ? <SidebarProfile me={me} onOpen={() => openProfile("me")} requestCount={requests.items.length} hasMore={requests.hasMore} /> : <p className="rail-footnote">Not signed in</p>}
+        {me ? <SidebarProfile me={me} onOpen={() => openProfile("me")} requestCount={requests.items.length} hasMore={requests.hasMore} /> : <p className="rail-footnote">{session ? "Signed in" : "Not signed in"}</p>}
       </aside>
       <div className="workspace">
         <header className="topbar">
@@ -235,7 +235,7 @@ export default function App() {
             {page === "feed" && <button className="primary desktop-feed-compose" onClick={startComposer}>+ New post</button>}
             {token && <button className="mobile-account-shortcut" aria-label="Open account settings" onClick={() => setPage("account")}><NavIcon name="account" /></button>}
             <button className="account-shortcut" aria-label={token ? "View your profile" : "Sign in"} onClick={() => token ? openProfile("me") : setPage("account")}>
-              {me ? <span className={`avatar ${avatarColor(me.id)}`}>{initials(me.display_name)}</span> : "Sign in"}
+              {me ? <span className={`avatar ${avatarColor(me.id)}`}>{initials(me.display_name)}</span> : session ? "My Profile" : "Sign in"}
               <RequestBadge count={requests.items.length} hasMore={requests.hasMore} />
             </button>
           </div>
