@@ -1,0 +1,14 @@
+{
+	admin off
+}
+
+http://127.0.0.1:8080 {
+	bind 127.0.0.1
+	reverse_proxy 127.0.0.1:8001 127.0.0.1:8002 {
+		lb_policy round_robin
+		health_uri /health
+		health_interval 2s
+		health_timeout 1s
+		header_down X-Backend-Instance {http.reverse_proxy.upstream.address}
+	}
+}

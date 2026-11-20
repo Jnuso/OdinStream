@@ -1,0 +1,23 @@
+{
+	admin off
+}
+
+http://:{$PORT:10000} {
+	header Cache-Control "no-store"
+	@probe {
+		method GET HEAD
+		path /health
+	}
+	handle @probe {
+		reverse_proxy 127.0.0.1:8001 127.0.0.1:8002 {
+			lb_policy round_robin
+			health_uri /health
+			health_interval 2s
+			health_timeout 1s
+			header_down X-Backend-Instance {http.reverse_proxy.upstream.address}
+		}
+	}
+	handle {
+		respond "Odin Stream load-balancing lab. Try GET /health." 200
+	}
+}
