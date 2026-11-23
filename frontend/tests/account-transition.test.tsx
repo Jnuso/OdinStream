@@ -55,7 +55,7 @@ it("keeps the setup step on token refresh and opens Discover after completion", 
   mocks.api.mockImplementation(async (path, _token, options) => {
     if (path === "/api/me/setup") return { setup_complete: options?.method === "PUT" };
     if (path === "/api/me/profile") return { id: "test-user", display_name: "Jack", handle: "Jack" };
-    return { items: [], favorite_genres: [], streaming_services: [] };
+    return { items: [], next_offset: null, favorite_genres: [], streaming_services: [] };
   });
   render(<App />);
   act(() => mocks.authChanged!("SIGNED_IN", session));

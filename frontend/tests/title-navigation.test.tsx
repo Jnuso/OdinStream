@@ -111,7 +111,7 @@ it("loads an actor profile and persists the favorite toggle across panel visits"
   expect(favorited).toBe(false);
 });
 
-it("waits for Discover and lets Feed join its in-flight preload", async () => {
+it("waits for Featured and lets Feed join its in-flight preload", async () => {
   let resolveTrending!: (response: Response) => void;
   let resolveLibrary!: (response: Response) => void;
   let resolveFeed!: (response: Response) => void;
@@ -131,11 +131,9 @@ it("waits for Discover and lets Feed join its in-flight preload", async () => {
   }));
   render(<App />);
   await act(async () => auth.changed!("INITIAL_SESSION", { access_token: "token", user: { id } } as Session));
-  await screen.findByRole("heading", { name: "Discover" });
+  await screen.findByRole("heading", { name: "Featured" });
   expect(order).toEqual([]);
   await act(async () => resolveTrending(Response.json({ items: [{ ...title, backdrop_path: "/hero.jpg" }] })));
-  expect(order).toEqual([]);
-  fireEvent.load(document.querySelector(".discover-feature-art")!);
   await waitFor(() => expect(order).toEqual(["library"]));
   await act(async () => resolveLibrary(Response.json({ items: [] })));
   await waitFor(() => expect(order).toEqual(["library", "feed"]));

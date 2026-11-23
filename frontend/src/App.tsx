@@ -20,6 +20,9 @@ import Setup from "./components/Setup";
 import { AccountStatus } from "./components/AccountLayout";
 import { api } from "./data/api";
 import Discover from "./components/Discover";
+import Featured from "./components/Featured";
+import CatalogSearch from "./components/CatalogSearch";
+import ActorCredits, { type Actor, type CreditRole } from "./components/ActorCredits";
 import Feed from "./components/Feed";
 import Library from "./components/Library";
 import FavoritePeople from "./components/FavoritePeople";
@@ -29,8 +32,7 @@ import TitleDetails from "./components/TitleDetails";
 import NavIcon from "./components/NavIcon";
 import "./App.css";
 import "./SiteRefinements.css";
-import "./DesktopPrototype.css";
-import "./RetroVideoStore.css";
+import "./Cinema.css";
 import FollowRequests, { RequestBadge } from "./components/FollowRequests";
 import { useFollowRequests } from "./data/useFollowRequests";
 import { createLibraryCache } from "./data/libraryCache";
@@ -79,16 +81,16 @@ export default function App() {
   const [libraryVersion, setLibraryVersion] = useState(0);
   const [favoriteVersion, setFavoriteVersion] = useState(0);
   const refreshFavorites = () => setFavoriteVersion(value => value + 1);
-  const [discoverReadyToken, setDiscoverReadyToken] = useState<string | null>(null);
-  const canPreload = !!token && setup?.id === viewerId && setup.status === "ready" && !recovery;
+  const [featuredReady, setFeaturedReady] = useState(false);
+  const [person, setPerson] = useState<{ actor: Actor; role: CreditRole } | null>(null);
   const viewingOwnProfile = page === "profile" && (profileId === "me" || profileId === viewerId);
 
   useEffect(() => {
-    if (page !== "discover") {
-      setDiscoverReadyToken(null);
+    if (page !== "featured") {
+      setFeaturedReady(false);
       return;
     }
-    if (!canPreload || discoverReadyToken !== token || !preferencesCache) return;
+    if (!featuredReady || !token || setup?.id !== viewerId || setup.status !== "ready" || recovery || !preferencesCache) return;
     let active = true;
     void (async () => {
       for (const cache of [libraryCache.pages["in-progress"], feedCache, ownProfile.posts, preferencesCache]) {
@@ -97,7 +99,12 @@ export default function App() {
       }
     })();
     return () => { active = false; };
-  }, [canPreload, discoverReadyToken, feedCache, libraryCache, ownProfile, preferencesCache, page, token]);
+  }, [featuredReady, feedCache, libraryCache, ownProfile, preferencesCache, page, recovery, setup, token, viewerId]);
+
+  useEffect(() => {
+    setFocus(null);
+    setPerson(null);
+  }, [page, profileId]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -221,10 +228,10 @@ export default function App() {
       <aside className="sidebar">
         <a
           className="brand"
-          href="#/discover"
+          href="#/featured"
           onClick={(event) => {
             event.preventDefault();
-            setPage("discover");
+            setPage("featured");
           }}
         >
           <span className="brand-mark" aria-hidden="true">
@@ -242,8 +249,10 @@ export default function App() {
           </span>
           <span>Odin Stream</span>
         </a>
-        <div className="nav-label">Navigation</div>
         <nav aria-label="Main navigation">
+          <button className={`nav-item ${page === "featured" ? "active" : ""}`} aria-current={page === "featured" ? "page" : undefined} onClick={() => setPage("featured")}>
+            <NavIcon name="featured" />Featured
+          </button>
           <button className={`nav-item ${page === "discover" ? "active" : ""}`} aria-current={page === "discover" ? "page" : undefined} onClick={() => setPage("discover")}>
             <NavIcon name="discover" />Discover
           </button>
@@ -272,10 +281,14 @@ export default function App() {
       <div className="workspace">
         <header className="topbar">
           <span>
-            {page === "discover" ? "Discover" : page === "library" ? "My Library" : page === "account" ? "Account" : page === "feed" ? "Feed" : "Profile"}
+            {page === "featured" ? "Odin Stream" : page === "search" ? "Search" : page === "discover" ? "Discover" : page === "library" ? "My Library" : page === "account" ? "Account" : page === "feed" ? "Feed" : "Profile"}
           </span>
           <div>
-            <span className="country">United States</span>
+            <button className="header-search secondary" aria-current={page === "search" ? "page" : undefined}
+              onClick={() => {
+                if (page === "search") document.getElementById("catalog-query")?.focus();
+                else setPage("search");
+              }}><NavIcon name="search" /> Search</button>
             {page === "feed" && <button className="primary desktop-feed-compose" onClick={startComposer}>+ New post</button>}
             {token && <button className="mobile-account-shortcut" aria-label="Open account settings" onClick={() => setPage("account")}><NavIcon name="account" /></button>}
             <button className="account-shortcut" aria-label={token ? "View your profile" : "Sign in"} onClick={() => token ? openProfile("me") : setPage("account")}>
@@ -285,13 +298,23 @@ export default function App() {
           </div>
         </header>
         <main id="main" tabIndex={-1}>
-          {page === "discover" ? (
-            <Discover token={token} preferencesCache={preferencesCache} onOpenTitle={openTitle} onOpenAccount={() => setPage("account")} onReady={setDiscoverReadyToken} />
-          ) : page === "library" ? (
+          <div hidden={page !== "search"}>
+            <CatalogSearch active={page === "search"} token={token} onOpenTitle={openTitle} onOpenPerson={(actor, role) => setPerson({ actor, role })} />
+          </div>
+          {page === "featured" ? (
+            <Featured onOpenTitle={openTitle} onReady={setFeaturedReady} />
+          ) : page === "search" ? null : page === "discover" ? (
             <>
-              <Library key={viewerId || "signed-out"} token={token} cache={libraryCache} version={libraryVersion} onOpenTitle={openTitle} />
-              {token && <FavoritePeople key={viewerId} token={token} version={favoriteVersion} onChange={refreshFavorites} onOpenTitle={openTitle} />}
+              <Discover key={viewerId || "guest"} token={token} preferencesCache={preferencesCache}
+                onOpenTitle={openTitle} onOpenAccount={() => setPage("account")} onOpenFeatured={() => setPage("featured")}
+                version={favoriteVersion} />
+              {token && <details className="discover-favorites">
+                <summary>Favorite people</summary>
+                <FavoritePeople key={viewerId} token={token} version={favoriteVersion} onChange={refreshFavorites} onOpenTitle={openTitle} />
+              </details>}
             </>
+          ) : page === "library" ? (
+            <Library key={viewerId || "signed-out"} token={token} cache={libraryCache} version={libraryVersion} onOpenTitle={openTitle} />
           ) : page === "account" ? (
             <Account
               session={session}
@@ -378,16 +401,19 @@ export default function App() {
             <span>
               <strong>OdinStream</strong>
             </span>
-            <span>Movie and TV data from TMDB. Availability provided by JustWatch.</span>
+            <span>Movie and TV data from <a href="https://www.themoviedb.org/" target="_blank" rel="noreferrer">TMDB</a>.
+              Availability provided by <a href="https://www.justwatch.com/" target="_blank" rel="noreferrer">JustWatch</a>.
+              This product uses the TMDB API and has no TMDB endorsement or certification.</span>
           </footer>
         </main>
       </div>
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {([ ["discover", "Discover"], ["library", "Library"], ["feed", "Feed"], ["profile", "Profile"] ] as const).map(([target, label]) => (
+        {([ ["featured", "Featured"], ["discover", "Discover"], ["library", "Library"], ["feed", "Feed"], ["profile", "Profile"] ] as const).map(([target, label]) => (
           <button key={target} aria-current={(target === "profile" ? viewingOwnProfile : page === target) ? "page" : undefined} onClick={() => target === "profile" ? (token ? openProfile("me") : setPage("account")) : setPage(target)}><NavIcon name={target} />{target === "profile" && <RequestBadge count={requests.items.length} hasMore={requests.hasMore} />}<span>{label}</span></button>
         ))}
-        <button onClick={startComposer}><NavIcon name="plus" /><span>New post</span></button>
       </nav>
+      {page === "search" && person && <ActorCredits key={person.actor.id} actor={person.actor} role={person.role} token={token}
+        onClose={() => setPerson(null)} onOpenTitle={openTitle} onFavoriteChange={refreshFavorites} />}
       {focus && <TitleDetails key={`${focus.media_type}:${focus.id}`} selection={focus} token={token} viewerId={viewerId} reloadKey={reloadKey} onClose={() => setFocus(null)} onReview={title => { setReviewTitle(title); setComposer("new"); }} onOpenProfile={openProfile} onEdit={setComposer} onOpenTitle={openTitle} onFavoriteChange={refreshFavorites} onSaved={() => { libraryCache.invalidate(); setLibraryVersion(value => value + 1); }} />}
       {composer && token && (
         <PostComposer
