@@ -110,6 +110,29 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(self.client.get("/api/catalog/movie/0").status_code, 422)
         self.assertEqual(self.client.get("/api/catalog/person/1").status_code, 422)
 
+    def test_tv_details_include_cast_from_across_the_series(self):
+        data = {
+            "id": 1,
+            "name": "A show",
+            "watch/providers": {"results": {}},
+            "aggregate_credits": {
+                "cast": [
+                    {"id": 2, "name": "Actor One", "profile_path": "/portrait.jpg",
+                     "roles": [{"character": "Lead"}, {"character": "Double"}, {"character": "Lead"}]},
+                    {"id": 3, "name": "Actor Two", "roles": []},
+                ],
+                "crew": [{"id": 4, "name": "Director"}],
+            },
+        }
+        with patch("app.catalog.tmdb_get", return_value=data) as fetch:
+            response = self.client.get("/api/catalog/tv/1")
+        fetch.assert_called_once_with("/tv/1", {"append_to_response": "watch/providers,aggregate_credits"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["cast"], [
+            {"id": 2, "name": "Actor One", "profile_path": "/portrait.jpg", "characters": ["Lead", "Double"]},
+            {"id": 3, "name": "Actor Two", "profile_path": None, "characters": []},
+        ])
+
     def test_upstream_errors(self):
         request = httpx.Request("GET", "https://api.themoviedb.org/3/movie/1")
         errors = [

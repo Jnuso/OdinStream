@@ -4,7 +4,9 @@ import Poster from "./Poster";
 import PostCard from "./PostCard";
 import Skeleton from "./Skeleton";
 import { api } from "../data/api";
-import { formatYear, type MediaType, type Post, type TitleSummary } from "../data/social";
+import { formatYear, initials, type MediaType, type Post, type TitleSummary } from "../data/social";
+
+const CAST_PAGE_SIZE = 12;
 
 type Title = {
   id: number;
@@ -19,6 +21,7 @@ type Details = Title & {
   genres: string[];
   seasons: { season_number: number; name: string; episode_count: number }[];
   availability: { link: string | null; flatrate: string[]; rent: string[]; buy: string[] };
+  cast?: { id: number; name: string; profile_path: string | null; characters: string[] }[];
 };
 type Episode = { episode_number: number; name: string; overview: string; air_date: string | null };
 type SavedTitle = { media_type: MediaType; tmdb_id: number; status: string };
@@ -42,6 +45,8 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
   const [reviewError, setReviewError] = useState("");
   const [libraryCheck, setLibraryCheck] = useState<LibraryCheck | null>(null);
   const [libraryRetry, setLibraryRetry] = useState(0);
+  const [visibleCastCount, setVisibleCastCount] = useState(CAST_PAGE_SIZE);
+  const cast = detail?.cast ?? [];
   const detailRequest = useRef(0);
   const seasonRequest = useRef(0);
   const currentLibraryCheck = detail && libraryCheck?.token === token && libraryCheck.mediaType === detail.media_type && libraryCheck.id === detail.id ? libraryCheck : null;
@@ -219,6 +224,33 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
                 ) : (
                   <p>No episode information available.</p>
                 ))}
+            </section>
+          )}
+          {detail.media_type === "tv" && (
+            <section className="title-cast">
+              <h3>Cast</h3>
+              {cast.length === 0 ? <p className="muted">Cast information is unavailable.</p> : (
+                <ul className="title-cast-list">
+                  {cast.slice(0, visibleCastCount).map(actor => (
+                    <li key={actor.id}>
+                      <div className="title-cast-photo" aria-hidden="true">
+                        {initials(actor.name)}
+                        {actor.profile_path && (
+                          <img src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`} alt="" loading="lazy"
+                            onError={event => { event.currentTarget.hidden = true; }} />
+                        )}
+                      </div>
+                      <strong>{actor.name}</strong>
+                      {actor.characters.length > 0 && <span className="muted">{actor.characters.join(", ")}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {cast.length > visibleCastCount && (
+                <button className="secondary" onClick={() => setVisibleCastCount(count => count + CAST_PAGE_SIZE)}>
+                  Show more cast
+                </button>
+              )}
             </section>
           )}
       </>}

@@ -187,7 +187,8 @@ def search_available(query: str = Query(min_length=1, max_length=200), page: int
 def title_details(media_type: MediaType, tmdb_id: int) -> dict:
     if tmdb_id <= 0:
         raise APIError(422, "invalid_title", "Title IDs must be positive.")
-    data = tmdb_get(f"/{media_type}/{tmdb_id}", {"append_to_response": "watch/providers"})
+    append = "watch/providers,aggregate_credits" if media_type == "tv" else "watch/providers"
+    data = tmdb_get(f"/{media_type}/{tmdb_id}", {"append_to_response": append})
     providers = data.get("watch/providers")
     if not isinstance(providers, dict):
         providers = tmdb_get(f"/{media_type}/{tmdb_id}/watch/providers")
@@ -198,6 +199,18 @@ def title_details(media_type: MediaType, tmdb_id: int) -> dict:
         "genres": [genre.get("name") for genre in data.get("genres", []) if genre.get("name")],
         "seasons": [{"season_number": season.get("season_number"), "name": season.get("name"),
                      "episode_count": season.get("episode_count")} for season in data.get("seasons", [])],
+        "cast": [
+            {
+                "id": actor["id"],
+                "name": actor["name"],
+                "profile_path": actor.get("profile_path"),
+                "characters": list(dict.fromkeys(
+                    role["character"] for role in actor.get("roles") or [] if role.get("character")
+                )),
+            }
+            for actor in (data.get("aggregate_credits") or {}).get("cast") or []
+            if actor.get("id") is not None and actor.get("name")
+        ],
         "availability": {
             "link": availability.get("link"),
             **{category: [provider.get("provider_name") for provider in availability.get(category, [])
