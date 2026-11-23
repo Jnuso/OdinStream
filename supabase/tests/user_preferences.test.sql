@@ -18,14 +18,14 @@ set local role odin_api;
 select throws_ok($$insert into public.user_preferences (user_id, favorite_genres)
   values ('11111111-1111-4111-8111-111111111111', array['Not a genre'])$$, '23514', null, 'unknown genre rejected');
 select throws_ok($$insert into public.user_preferences (user_id, streaming_services)
-  values ('11111111-1111-4111-8111-111111111111', array['Not a service'])$$, '23514', null, 'unknown service rejected');
+  values ('11111111-1111-4111-8111-111111111111', array[null]::text[])$$, '23514', null, 'null service rejected');
 select lives_ok($$insert into public.user_preferences (user_id, favorite_genres, streaming_services)
-  values ('11111111-1111-4111-8111-111111111111', array['Drama', 'Science Fiction'], array['Netflix'])$$, 'owner can save preferences');
+  values ('11111111-1111-4111-8111-111111111111', array['Drama', 'Science Fiction', 'TV Movie', 'Sci-Fi & Fantasy'], array['Netflix'])$$, 'owner can save preferences including newly supported genres');
 select throws_ok($$insert into public.user_preferences (user_id, favorite_genres)
   values ('22222222-2222-4222-8222-222222222222', array['Drama'])$$, '42501', null, 'cannot insert another user preferences');
-select lives_ok($$update public.user_preferences set streaming_services = array['Max', 'Hulu']
+select lives_ok($$update public.user_preferences set streaming_services = array['Max', 'Hulu', 'Peacock Premium']
   where user_id = '11111111-1111-4111-8111-111111111111'$$, 'owner can update preferences');
-select is((select streaming_services from public.user_preferences), array['Max', 'Hulu']::text[], 'services persisted');
+select is((select streaming_services from public.user_preferences), array['Max', 'Hulu', 'Peacock Premium']::text[], 'services persisted');
 select lives_ok($$update public.user_preferences set updated_at = '2000-01-01T00:00:00Z'
   where user_id = '11111111-1111-4111-8111-111111111111'$$, 'owner can update the timestamp column');
 select is((select updated_at from public.user_preferences), now(), 'update timestamp is set by the database');

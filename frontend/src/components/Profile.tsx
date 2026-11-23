@@ -12,8 +12,10 @@ import {
 import PostList from "./PostList";
 import { api } from "../data/api";
 import Modal from "./Modal";
+import ProfileConnections, { type ConnectionDirection } from "./ProfileConnections";
 import "./Profile.css";
 import Skeleton from "./Skeleton";
+import type { createPageCache } from "../data/pageCache";
 
 function canReadPosts(profile: ProfileData, viewerId: string) {
   return profile.can_view_posts ?? (profile.id === viewerId || profile.visibility === "public" || profile.viewer_follows);
@@ -30,6 +32,7 @@ export default function Profile({
   onChanged,
   onOpenAccount,
   followRequests,
+  ownProfile,
 }: {
   token: string;
   viewerId: string;
@@ -41,25 +44,37 @@ export default function Profile({
   onChanged: () => void;
   onOpenAccount: () => void;
   followRequests?: ReactNode;
+  ownProfile?: {
+    summary: ReturnType<typeof createPageCache<ProfileData>>;
+    posts: ReturnType<typeof createPageCache<Post[]>>;
+  };
 }) {
   const target = profileId === "me" ? viewerId : profileId;
   const isSelf = target === viewerId;
-  const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [posts, setPosts] = useState<Post[] | null>(null);
-  const [loadedFor, setLoadedFor] = useState<{ token: string; target: string } | null>(null);
+  const [profile, setProfile] = useState<ProfileData | null>(() => (isSelf && ownProfile?.summary.peek()) || null);
+  const [posts, setPosts] = useState<Post[] | null>(() => (isSelf && ownProfile?.posts.peek()) || null);
+  const [loadedFor, setLoadedFor] = useState<{ token: string; target: string } | null>(() =>
+    isSelf && ownProfile?.summary.peek() && ownProfile.posts.peek() ? { token, target } : null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [followBusy, setFollowBusy] = useState(false);
   const [editingTarget, setEditingTarget] = useState<string | null>(null);
-
-
+  const [connections, setConnections] = useState<{
+    token: string; target: string; direction: ConnectionDirection;
+  } | null>(null);
+  const [picture, setPicture] = useState<{ target: string; url: string } | null>(null);
 
   useEffect(() => {
     let active = true;
     setError("");
-    fetchProfile(token, target)
-      .then(async data => {
+    const request = isSelf && ownProfile
+      ? Promise.all([ownProfile.summary.load(), ownProfile.posts.load()])
+      : fetchProfile(token, target).then(async data => {
         const items = canReadPosts(data, viewerId) ? await fetchProfilePosts(token, target) : [];
+        return [data, items] as const;
+      });
+    request
+      .then(([data, items]) => {
         if (!active) return;
         setProfile(data);
         setPosts(items);
@@ -69,7 +84,18 @@ export default function Profile({
     return () => {
       active = false;
     };
-  }, [token, viewerId, target, attempt, reloadKey]);
+  }, [token, viewerId, target, isSelf, ownProfile, attempt, reloadKey]);
+
+  useEffect(() => {
+    let active = true;
+    setPicture(null);
+    if (loadedFor?.token === token && loadedFor.target === target && profile?.has_picture) {
+      api<{ jpeg: string }>(`/api/profiles/${target}/picture`, token)
+        .then(({ jpeg }) => active && setPicture({ target, url: `data:image/jpeg;base64,${jpeg}` }))
+        .catch(() => {});
+    }
+    return () => { active = false; };
+  }, [loadedFor, profile, target, token]);
 
   async function toggleFollow() {
     if (!profile) return;
@@ -99,13 +125,19 @@ export default function Profile({
   }
   if (!profile || posts === null || loadedFor?.token !== token || loadedFor.target !== target) return <><Skeleton label="Loading profile…" variant="profile" /><Skeleton label="Loading reviews…" variant="posts" count={2} /></>;
   const canViewPosts = canReadPosts(profile, viewerId);
+  const canViewConnections = isSelf || profile.visibility === "public";
 
   return (
     <div className="profile-page">
-      {isSelf && <div className="profile-toolbar"><button className="secondary" onClick={() => setEditingTarget(target)}>Edit profile</button></div>}
+      <div className={`profile-toolbar${isSelf ? "" : " profile-toolbar-read-only"}`}>
+        <span className="desktop-profile-label" aria-hidden="true">Profile</span>
+        {isSelf && <button className="secondary" onClick={() => setEditingTarget(target)}>Edit profile</button>}
+      </div>
       <section className="profile-header" aria-label={`${profile.display_name} profile`}>
         <span className={`avatar ${avatarColor(profile.id)} large-avatar`}>
-          {initials(profile.display_name)}
+          {picture?.target === target ? (
+            <img src={picture.url} alt="" onError={() => setPicture(null)} />
+          ) : initials(profile.display_name)}
         </span>
         <div className="profile-identity">
           <span className="eyebrow">@{profile.handle}</span>
@@ -116,12 +148,17 @@ export default function Profile({
             <span>
               <strong>{profile.post_count}</strong> Posts
             </span>
-            <span>
-              <strong>{profile.follower_count}</strong> Followers
-            </span>
-            <span>
-              <strong>{profile.following_count}</strong> Following
-            </span>
+            {(["followers", "following"] as const).map((direction) => {
+              const stat = direction === "followers"
+                ? <><strong>{profile.follower_count}</strong> Followers</>
+                : <><strong>{profile.following_count}</strong> Following</>;
+              return canViewConnections ? (
+                <button key={direction} type="button" aria-haspopup="dialog"
+                  onClick={() => setConnections({ token, target, direction })}>
+                  {stat}
+                </button>
+              ) : <span key={direction}>{stat}</span>;
+            })}
           </div>}
         {!isSelf && (
           <button
@@ -134,6 +171,18 @@ export default function Profile({
         )}
       </section>
       {isSelf && followRequests}
+      {canViewConnections && connections?.target === target && connections.token === token && (
+        <ProfileConnections
+          token={token}
+          profileId={target}
+          direction={connections.direction}
+          onClose={() => setConnections(null)}
+          onOpenProfile={(id) => {
+            setConnections(null);
+            onOpenProfile(id);
+          }}
+        />
+      )}
       {isSelf && editingTarget === target && (
         <Modal label="Edit profile" onClose={() => setEditingTarget(null)}>
         <ProfileSettings
@@ -183,6 +232,32 @@ export default function Profile({
   );
 }
 
+async function encodeProfilePicture(file: File): Promise<string> {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 10 * 1024 * 1024) {
+    throw new Error("Choose a JPEG, PNG, or WebP image up to 10 MB.");
+  }
+  const image = await createImageBitmap(file).catch(() => {
+    throw new Error("This image could not be opened.");
+  });
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 192;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("This browser could not resize the picture.");
+    const side = Math.min(image.width, image.height);
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, 192, 192);
+    context.drawImage(image, (image.width - side) / 2, (image.height - side) / 2, side, side, 0, 0, 192, 192);
+    for (const quality of [0.85, 0.65, 0.45]) {
+      const jpeg = canvas.toDataURL("image/jpeg", quality).split(",")[1];
+      if (jpeg && jpeg.length <= 60000) return jpeg;
+    }
+    throw new Error("The picture could not be resized. Choose another image.");
+  } finally {
+    image.close();
+  }
+}
+
 function ProfileSettings({
   token,
   profile,
@@ -204,6 +279,25 @@ function ProfileSettings({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [pictureFile, setPictureFile] = useState<File | null>(null);
+  const [pictureSaving, setPictureSaving] = useState(false);
+  const [pictureError, setPictureError] = useState("");
+
+  async function uploadPicture(event: FormEvent) {
+    event.preventDefault();
+    if (!pictureFile || pictureSaving) return;
+    setPictureSaving(true);
+    setPictureError("");
+    try {
+      const jpeg = await encodeProfilePicture(pictureFile);
+      await api("/api/me/profile/picture", token, { method: "PUT", body: JSON.stringify({ jpeg }) });
+      onSaved();
+    } catch (err) {
+      setPictureError(err instanceof Error ? err.message : "The picture could not be uploaded.");
+    } finally {
+      setPictureSaving(false);
+    }
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -225,6 +319,19 @@ function ProfileSettings({
     <section className="profile-editor">
       <h2>Edit profile</h2>
       <p className="muted profile-editor-intro">Make yourself at home. Choose how you appear to other members.</p>
+      <form className="account-form" onSubmit={uploadPicture}>
+        <label htmlFor="profile-picture">Profile picture</label>
+        <input id="profile-picture" type="file" accept="image/jpeg,image/png,image/webp"
+          disabled={pictureSaving} onChange={(event) => {
+            setPictureFile(event.target.files?.[0] ?? null);
+            setPictureError("");
+          }} />
+        <p className="muted small">JPEG, PNG, or WebP up to 10 MB. Visible to members who can open your profile.</p>
+        {pictureError && <p className="form-error" role="alert">{pictureError}</p>}
+        <button className="secondary" type="submit" disabled={!pictureFile || pictureSaving}>
+          {pictureSaving ? "Uploading…" : "Upload picture"}
+        </button>
+      </form>
       <form onSubmit={submit} className="account-form">
         <label htmlFor="profile-name">Display name</label>
         <input

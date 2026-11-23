@@ -3,11 +3,56 @@ import { clearCatalogCache } from "../src/data/catalogCache";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import Library from "../src/components/Library";
+import { createLibraryCache } from "../src/data/libraryCache";
 
 type Mark = { season_number: number; episode_number: number };
 type Episode = { episode_number: number; name: string };
 
 afterEach(() => { clearCatalogCache(); cleanup(); vi.unstubAllGlobals(); });
+
+it("renders a preloaded library row before catalog details arrive", async () => {
+  let finishCatalog!: (response: Response) => void;
+  const catalog = new Promise<Response>(resolve => { finishCatalog = resolve; });
+  const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    if (String(input).includes("/api/me/saved-titles?group=in-progress")) {
+      return Promise.resolve(Response.json({ items: [{ id: "show", media_type: "tv", tmdb_id: 42, status: "watching" }] }));
+    }
+    if (String(input).endsWith("/episodes")) return Promise.resolve(Response.json({ items: [], last_watched: null }));
+    return catalog;
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const cache = createLibraryCache("test-token");
+  const preload = cache.pages["in-progress"].load();
+  expect(cache.pages["in-progress"].load()).toBe(preload);
+  await preload;
+
+  render(<Library token="test-token" cache={cache} />);
+  expect(screen.getByText("Loading title details…")).toBeTruthy();
+  expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/me/saved-titles?group=in-progress"))).toHaveLength(1);
+  finishCatalog(Response.json({ name: "Ready to watch", poster_path: null, seasons: [] }));
+  await screen.findByText("Ready to watch");
+});
+
+it("discards a pre-mutation response and keeps separate account caches", async () => {
+  let finishPrevious!: (response: Response) => void;
+  const fetchMock = vi.fn()
+    .mockImplementationOnce(() => new Promise<Response>(resolve => { finishPrevious = resolve; }))
+    .mockResolvedValueOnce(Response.json({ items: [], next_offset: 2 }))
+    .mockResolvedValueOnce(Response.json({ items: [] }));
+  vi.stubGlobal("fetch", fetchMock);
+  const cache = createLibraryCache("first-token");
+  const previous = cache.pages["in-progress"].load();
+  cache.invalidate();
+  await cache.pages["in-progress"].load();
+  finishPrevious(Response.json({ items: [], next_offset: 1 }));
+  await previous;
+  expect(cache.pages["in-progress"].peek()?.next_offset).toBe(2);
+
+  const other = createLibraryCache("second-token");
+  expect(other.pages["in-progress"].peek()).toBeUndefined();
+  await other.pages["in-progress"].load();
+  expect(new Headers(fetchMock.mock.calls[2][1].headers).get("Authorization")).toBe("Bearer second-token");
+});
 
 function fixture(options: { episodes: Episode[] | null; missingSeason?: boolean; missingTitle?: boolean; failDelete?: boolean; lastWatched?: Mark }) {
   let watched: Mark[] = [

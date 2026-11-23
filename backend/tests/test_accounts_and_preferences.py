@@ -73,7 +73,7 @@ class PreferencesRoutesTest(unittest.TestCase):
         self.store = MemoryPreferenceStore()
         app.dependency_overrides[get_settings] = lambda: self.settings
         app.dependency_overrides[preference_store] = lambda: self.store
-        self.client = TestClient(app)
+        self.client = TestClient(app, client=(self.id(), 50000))
         self.headers = {"Authorization": f"Bearer {_token(self.user_a)}"}
 
     def tearDown(self) -> None:
@@ -108,7 +108,7 @@ class SetupRoutesTest(unittest.TestCase):
         self.user_a = str(uuid4())
         self.settings = Settings(SUPABASE_URL, TEST_SECRET, "postgresql://odin_api_login:pw@localhost:5432/postgres", ())
         app.dependency_overrides[get_settings] = lambda: self.settings
-        self.client = TestClient(app)
+        self.client = TestClient(app, client=(self.id(), 50000))
         self.headers = {"Authorization": f"Bearer {_token(self.user_a)}"}
 
     def tearDown(self) -> None:
@@ -164,6 +164,41 @@ class SetupRoutesTest(unittest.TestCase):
             down = self.client.put("/api/me/setup", headers=self.headers, json={"username": "Valid_1", "visibility": "private"})
         self.assertEqual(down.status_code, 503)
         self.assertEqual(down.json()["error"], "account_unavailable")
+
+    def test_setup_persists_verified_titles_and_people_on_same_connection(self) -> None:
+        conn = MagicMock()
+        conn.__enter__.return_value = conn
+        conn.execute.return_value.fetchone.return_value = (self.user_a,)
+        body = {
+            "username": "New_user", "visibility": "private",
+            "favorite_titles": [{"media_type": "movie", "id": 10}, {"media_type": "tv", "id": 10},
+                                {"media_type": "movie", "id": 10}],
+            "favorite_people": [4, 4],
+        }
+        with (patch("app.accounts.user_connection", return_value=conn) as connection,
+              patch("app.favorite_titles.tmdb_get", return_value={"id": 10, "title": "Film", "name": "Show",
+                                                                    "genres": [{"id": 18}]}) as titles,
+              patch("app.catalog.tmdb_get", return_value={"id": 4, "name": "Person"}) as people):
+            response = self.client.put("/api/me/setup", headers=self.headers, json=body)
+        self.assertEqual(response.status_code, 200)
+        connection.assert_called_once()
+        people.assert_called_once_with("/person/4")
+        self.assertEqual({call.args[0] for call in titles.call_args_list}, {"/movie/10", "/tv/10"})
+        writes = [call.args for call in conn.execute.call_args_list]
+        self.assertEqual([params[1:4] for sql, params in writes if "insert into public.favorite_titles" in sql],
+                         [("movie", 10, "Film"), ("tv", 10, "Show")])
+        self.assertEqual([params[1:3] for sql, params in writes if "insert into public.favorite_people" in sql],
+                         [(4, "Person")])
+
+    def test_setup_leaves_account_incomplete_if_a_favorite_cannot_be_verified(self) -> None:
+        with (patch("app.accounts.user_connection") as connection,
+              patch("app.favorite_titles.tmdb_get", return_value={"id": 99, "title": "Wrong title"})):
+            response = self.client.put("/api/me/setup", headers=self.headers, json={
+                "username": "New_user", "visibility": "private",
+                "favorite_titles": [{"media_type": "movie", "id": 10}],
+            })
+        self.assertEqual(response.status_code, 404)
+        connection.assert_not_called()
 
 
 if __name__ == "__main__":

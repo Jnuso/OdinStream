@@ -1,0 +1,62 @@
+/* Shared navigation and layouts for the cinema theme. */
+:root {
+  --action-ink: #211609;
+}
+
+.nav-item.active, .mobile-nav button[aria-current="page"] {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.primary, .primary:hover, .brand-mark,
+.library-tabs button.active, .search-filters button[aria-pressed="true"],
+.discover-services button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--action-ink);
+}
+.primary:hover { filter: brightness(1.08); }
+.desktop-brand-letter, .desktop-profile-label, .profile-page .profile-toolbar-read-only { display: none; }
+.desktop-feed-compose { display: none; }
+.discover-favorites { margin-block: 30px; }
+.discover-favorites summary { cursor: pointer; color: var(--accent); width: fit-content; }
+.discover-favorites .favorite-people { margin-top: 12px; }
+.discover-favorites .favorite-people > h2 { display: none; }
+.topbar { background: var(--canvas); }
+.topbar > div, .discover-services, .search-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.discover-services, .search-filters { flex-wrap: wrap; }
+.header-search { display: inline-flex; align-items: center; gap: 7px; }
+.header-search[aria-current="page"] { color: var(--accent); border-color: var(--accent); }
+.recommendation-grid .discover-result { text-align: left; }
+.recommendation-grid .discover-result > span { display: grid; gap: 3px; }
+.recommendation-grid .poster-image { object-fit: cover; }
+.empty button { margin: 8px 4px 0; }
+.library-entry > .library-actions {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.library-actions .library-status { display: flex; align-items: center; gap: 8px; flex: none; }
+.library-actions .library-status select { width: auto; }
+.library-actions-button[aria-expanded="true"] { border-color: var(--accent); }
+.library-entry .library-next { margin: 0; }
+footer a { text-decoration: underline; text-underline-offset: 2px; }
+
+@media (max-width: 760px) {
+  .desktop-feed-compose { display: inline-flex; }
+  .mobile-nav button:last-child:not([aria-current]) { color: var(--muted); }
+}
+
+@media (max-width: 430px) {
+  .topbar { padding-inline: 14px; }
+  .topbar > div { gap: 6px; }
+  .header-search { min-height: 36px; padding-inline: 9px; }
+  .desktop-feed-compose { padding-inline: 8px; }
+  .topbar:has(.desktop-feed-compose) > span { display: none; }
+}

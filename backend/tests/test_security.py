@@ -275,7 +275,7 @@ class SecurityBaseTest(unittest.TestCase):
         app.dependency_overrides[library_store] = lambda: self.library
         app.dependency_overrides[social_store] = lambda: self.social
         app.dependency_overrides[preference_store] = lambda: self.preferences
-        self.client = TestClient(app)
+        self.client = TestClient(app, client=(self.id(), 50000))
 
     def tearDown(self) -> None:
         app.dependency_overrides.clear()

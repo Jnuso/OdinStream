@@ -3,6 +3,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Session } from "@supabase/supabase-js";
 import App from "../src/App";
+import TitleDetails from "../src/components/TitleDetails";
+import ActorCredits from "../src/components/ActorCredits";
 import { clearCatalogCache } from "../src/data/catalogCache";
 
 const auth = vi.hoisted(() => ({ changed: null as ((event: string, session: Session | null) => void) | null }));
@@ -20,6 +22,127 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
 });
 afterEach(() => { cleanup(); clearCatalogCache(); vi.unstubAllGlobals(); auth.changed = null; window.history.replaceState(null, "", "/"); });
+
+it("shows movie director portraits above the cast", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+    ...title, media_type: "movie",
+    directors: [{ id: 8, name: "A Director", profile_path: "/director.jpg" }],
+    cast: [{ id: 7, name: "An Actor", characters: [] }],
+  })));
+  render(<TitleDetails selection={{ media_type: "movie", id: title.id }} token={null}
+    onClose={vi.fn()} onOpenTitle={vi.fn()} />);
+  const directedBy = await screen.findByRole("heading", { name: "Directed by" });
+  const cast = screen.getByRole("heading", { name: "Cast" });
+  expect(directedBy.parentElement?.nextElementSibling).toBe(cast.parentElement);
+  expect(directedBy.parentElement?.querySelector("img")?.getAttribute("src")).toContain("/w185/director.jpg");
+  expect(screen.getByText("A Director")).toBeTruthy();
+});
+
+it.each([
+  { mediaType: "tv", field: "creators", role: "creator", label: "creator credits" },
+  { mediaType: "movie", field: "directors", role: "director", label: "directing credits" },
+] as const)("opens the shared profile with $label from a $mediaType title", async ({ mediaType, field, role, label }) => {
+  const person = { id: 8, name: "A Person" };
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), "http://localhost");
+    if (url.pathname.endsWith("/credits")) {
+      return Response.json({ items: [{ ...title, id: 43, name: "Another title", characters: [] }] });
+    }
+    if (url.pathname.endsWith("/people/8")) return Response.json(person);
+    return Response.json({ ...title, media_type: mediaType, [field]: [person] });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const onOpenTitle = vi.fn();
+  render(<TitleDetails selection={{ media_type: mediaType, id: title.id }} token={null}
+    onClose={vi.fn()} onOpenTitle={onOpenTitle} />);
+  fireEvent.click(await screen.findByRole("button", { name: person.name }));
+  await screen.findByRole("dialog", { name: `${person.name} ${label}` });
+  const credits = await screen.findAllByRole("button", { name: /Another title/ });
+  expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith(`/people/8/credits?role=${role}`))).toBe(true);
+  fireEvent.click(credits[0]);
+  expect(onOpenTitle).toHaveBeenCalledWith("tv", 43);
+});
+
+it("opens an actor's other credits and navigates to a credited title", async () => {
+  const actor = { id: 7, name: "Adam Scott", profile_path: null, characters: ["Mark Scout"] };
+  const movie = { ...title, media_type: "movie", name: "A movie", characters: ["Alex"] };
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => (
+    String(input).endsWith("/people/7/credits")
+      ? Response.json({ items: [{ ...title, characters: actor.characters }, movie] })
+      : Response.json({ ...title, cast: [actor] })
+  )));
+  const openTitle = vi.fn();
+  render(<TitleDetails selection={{ media_type: "tv", id: title.id }} token={null}
+    onClose={vi.fn()} onOpenTitle={openTitle} />);
+  fireEvent.click(await screen.findByRole("button", { name: /Adam Scott/ }));
+  await screen.findByRole("dialog", { name: "Adam Scott acting credits" });
+  expect(screen.queryByRole("button", { name: /^Severance/ })).toBeNull();
+  fireEvent.click(await screen.findByRole("button", { name: /A movie.*2022.*Alex/ }));
+  expect(openTitle).toHaveBeenCalledWith("movie", title.id);
+  expect(screen.queryByRole("dialog", { name: "Adam Scott acting credits" })).toBeNull();
+});
+
+it("loads an actor profile and persists the favorite toggle across panel visits", async () => {
+  const actor = { id: 7, name: "Adam Scott" };
+  let favorited = false;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+    const path = new URL(String(input), "http://localhost").pathname;
+    if (path === "/api/me/favorite-people/7") {
+      if (options?.method === "PUT") favorited = true;
+      if (options?.method === "DELETE") {
+        favorited = false;
+        return new Response(null, { status: 204 });
+      }
+      return Response.json({ favorited });
+    }
+    if (path.endsWith("/credits")) return Response.json({ items: [] });
+    return Response.json({ ...actor, biography: "An actor and producer.", place_of_birth: "Santa Cruz" });
+  }));
+  const panel = <ActorCredits actor={actor} token="token" onClose={vi.fn()} onOpenTitle={vi.fn()} />;
+  const first = render(panel);
+  await screen.findByText("An actor and producer.");
+  await waitFor(() => expect((screen.getByRole("button", { name: "Favorite" }) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole("button", { name: "Favorite" }));
+  await screen.findByRole("button", { name: "Favorited", pressed: true });
+  first.unmount();
+  render(panel);
+  fireEvent.click(await screen.findByRole("button", { name: "Favorited", pressed: true }));
+  await screen.findByRole("button", { name: "Favorite", pressed: false });
+  expect(favorited).toBe(false);
+});
+
+it("waits for Featured and lets Feed join its in-flight preload", async () => {
+  let resolveTrending!: (response: Response) => void;
+  let resolveLibrary!: (response: Response) => void;
+  let resolveFeed!: (response: Response) => void;
+  const trending = new Promise<Response>(resolve => { resolveTrending = resolve; });
+  const library = new Promise<Response>(resolve => { resolveLibrary = resolve; });
+  const feed = new Promise<Response>(resolve => { resolveFeed = resolve; });
+  const order: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = new URL(String(input), "http://localhost").pathname;
+    if (path === "/api/catalog/trending") return trending;
+    if (path === "/api/me/saved-titles") { order.push("library"); return library; }
+    if (path === "/api/feed") { order.push("feed"); return feed; }
+    if (path === `/api/profiles/${id}/posts`) order.push("profile");
+    if (path.endsWith("/setup")) return Response.json({ setup_complete: true });
+    if (path === "/api/me/profile") return Response.json(profile);
+    return Response.json({ items: [], streaming_services: [], next_offset: null });
+  }));
+  render(<App />);
+  await act(async () => auth.changed!("INITIAL_SESSION", { access_token: "token", user: { id } } as Session));
+  await screen.findByRole("heading", { name: "Featured" });
+  expect(order).toEqual([]);
+  await act(async () => resolveTrending(Response.json({ items: [{ ...title, backdrop_path: "/hero.jpg" }] })));
+  await waitFor(() => expect(order).toEqual(["library"]));
+  await act(async () => resolveLibrary(Response.json({ items: [] })));
+  await waitFor(() => expect(order).toEqual(["library", "feed"]));
+  fireEvent.click(screen.getAllByRole("button", { name: "Feed", exact: true })[0]);
+  await screen.findByRole("heading", { name: "Feed" });
+  await act(async () => resolveFeed(Response.json({ items: [post], next_offset: null })));
+  await screen.findByRole("button", { name: "Open Severance details" });
+  expect(order).toEqual(["library", "feed"]);
+});
 
 it.each(["library", "feed", "profile/me"])("opens title details over %s without changing tabs", async route => {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -48,6 +171,6 @@ it.each(["library", "feed", "profile/me"])("opens title details over %s without 
   expect(window.location.hash).toBe(`#/${route}`);
   if (route === "library") {
     expect(screen.getByRole("button", { name: "Watchlist", exact: true, pressed: true })).toBeTruthy();
-    expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url), "http://localhost").pathname === "/api/me/saved-titles" && !String(url).includes("?"))).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url), "http://localhost").pathname === "/api/me/saved-titles" && String(url).includes("group=watchlist"))).toHaveLength(1);
   }
 });

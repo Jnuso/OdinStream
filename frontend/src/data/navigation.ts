@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-export type Page = "discover" | "library" | "account" | "feed" | "profile";
+export type Page = "featured" | "search" | "discover" | "library" | "account" | "feed" | "profile";
 type Navigation = { page: Page; feed: "following" | "public"; profileId: string };
 
 function subscribe(onChange: () => void) {
@@ -9,6 +9,8 @@ function subscribe(onChange: () => void) {
 }
 
 const sections: Record<string, Page> = {
+  featured: "featured",
+  search: "search",
   discover: "discover",
   library: "library",
   account: "account",
@@ -21,7 +23,7 @@ export function useNavigation() {
   const [path, query] = hash.slice(1).split("?");
   const [, section, profileId] = (path ?? "").split("/");
   const route: Navigation = {
-    page: sections[section] ?? "discover",
+    page: sections[section] ?? "featured",
     feed: new URLSearchParams(query ?? "").get("feed") === "public" ? "public" : "following",
     profileId: profileId === "me" || /^[0-9a-f-]{36}$/i.test(profileId ?? "") ? profileId : "me",
   };

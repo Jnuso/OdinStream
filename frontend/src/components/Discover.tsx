@@ -1,162 +1,80 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
+import { fetchRecommendations, formatYear, type MediaType, type Recommendation } from "../data/social";
+import type { createPreferencesCache } from "../data/preferencesCache";
 import Poster from "./Poster";
-import { api } from "../data/api";
-import { fetchRecommendations, formatYear, type MediaType, type Recommendation, type TitleSummary, type Post } from "../data/social";
 import Skeleton from "./Skeleton";
-import TitleDetails from "./TitleDetails";
 
-type Title = {
-  id: number;
-  media_type: MediaType;
-  name: string;
-  release_date: string | null;
-  overview: string;
-  poster_path: string | null;
-};
-export default function Discover({
-  token,
-  focus = null,
-  onFocusHandled,
-  onReview,
-  onOpenProfile,
-  onEdit,
-  viewerId,
-  reloadKey = 0,
-  onOpenTitle,
-}: {
+export default function Discover({ token, onOpenTitle, onOpenAccount, onOpenFeatured, preferencesCache, version = 0 }: {
   token: string | null;
-  focus?: { media_type: MediaType; id: number } | null;
-  onFocusHandled?: () => void;
-  onReview?: (title: TitleSummary) => void;
-  onOpenProfile?: (id: string) => void;
-  onEdit?: (post: Post) => void;
-  viewerId?: string;
-  reloadKey?: number;
   onOpenTitle?: (type: MediaType, id: number) => void;
+  onOpenAccount?: () => void;
+  onOpenFeatured?: () => void;
+  preferencesCache?: ReturnType<typeof createPreferencesCache>;
+  version?: number;
 }) {
-  const [query, setQuery] = useState("");
   const [serviceFilter, setServiceFilter] = useState(false);
-  const [submittedQuery, setSubmittedQuery] = useState("");
-  const [resultPage, setResultPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(0);
-  const [items, setItems] = useState<Title[] | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [services, setServices] = useState<string[]>([]);
   const [recommended, setRecommended] = useState<Recommendation[] | null>(null);
-  const [recommendedBasis, setRecommendedBasis] = useState("");
   const [recommendedError, setRecommendedError] = useState("");
-  const searchRequest = useRef(0);
-  const [localTitle, setLocalTitle] = useState<{ media_type: MediaType; id: number } | null>(null);
-
-  async function loadSearch(text: string, page: number, filter: boolean) {
-    if (!text.trim()) return;
-    const request = ++searchRequest.current;
-    setLoading(true); setError("");
-    try {
-      const path = filter ? "/api/me/catalog/search" : "/api/catalog/search";
-      const data = await api<{ items: Title[]; page: number; total_pages: number }>(
-        `${path}?query=${encodeURIComponent(text.trim())}&page=${page}`, filter ? token ?? undefined : undefined);
-      if (request === searchRequest.current) {
-        setItems(data.items); setSubmittedQuery(text.trim()); setResultPage(data.page); setTotalPages(data.total_pages);
-      }
-    } catch (err) {
-      if (request === searchRequest.current) setError(err instanceof Error ? err.message : "Search failed.");
-    } finally { if (request === searchRequest.current) setLoading(false); }
-  }
-
-  function search(event: FormEvent) {
-    event.preventDefault();
-    void loadSearch(query, 1, serviceFilter);
-  }
-
-  function toggleServiceFilter() {
-    if (!token && !serviceFilter) { setError("Sign in and select streaming services in Account to use this filter."); return; }
-    const next = !serviceFilter;
-    setServiceFilter(next); setError("");
-    if (submittedQuery) void loadSearch(submittedQuery, 1, next);
-  }
-
-  function openTitle(mediaType: MediaType, id: number) {
-    if (onOpenTitle) onOpenTitle(mediaType, id);
-    else setLocalTitle({ media_type: mediaType, id });
-  }
-
-  useEffect(() => () => {
-    searchRequest.current += 1;
-  }, [token]);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
-    if (!token) {
-      setServiceFilter(false); setItems(null); setSubmittedQuery("");
-      setRecommended(null);
-      return;
-    }
+    if (!token) return;
     let active = true;
+    setRecommended(null);
     setRecommendedError("");
-    fetchRecommendations(token)
-      .then((data) => {
-        if (!active) return;
-        setRecommended(data.items);
-        setRecommendedBasis(data.basis);
+    fetchRecommendations(token, serviceFilter)
+      .then(data => {
+        if (active) setRecommended(data.basis === "popular" ? [] : data.items);
       })
-      .catch((err) => active && setRecommendedError(err instanceof Error ? err.message : "Recommendations are unavailable."));
-    return () => {
-      active = false;
-    };
-  }, [token]);
+      .catch(error => {
+        if (active) setRecommendedError(error instanceof Error ? error.message : "Recommendations are unavailable.");
+      });
+    return () => { active = false; };
+  }, [token, serviceFilter, version, retry]);
 
   useEffect(() => {
-    if (!focus) return;
-    setLocalTitle(focus);
-    onFocusHandled?.();
-  }, [focus, onFocusHandled]);
+    if (!token || !preferencesCache) return;
+    let active = true;
+    preferencesCache.load()
+      .then(data => { if (active) setServices(data.streaming_services ?? []); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [token, preferencesCache]);
 
   return (
     <section className="discover-page">
-      <div className="page-heading">
-        <div>
-          <h1>Discover</h1>
-          <p>Find your next great watch.</p>
-        </div>
-      </div>
-      <form className="discover-search" onSubmit={search}>
-        <label htmlFor="discover-query">Search titles</label>
-        <div>
-          <input
-            id="discover-query"
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Movie or show title"
-            maxLength={200}
-          />
-          <button className="primary" disabled={loading || !query.trim()} type="submit">
-            Search
+      <div className="page-heading"><div><h1>Discover</h1><p>Movies and shows picked for your tastes.</p></div></div>
+      {!token ? <div className="empty">
+        <h2>Find picks for you</h2>
+        <p>Sign in and choose a few favorites to get recommendations.</p>
+        <button className="primary" onClick={onOpenAccount}>Sign in</button>
+        <button className="secondary" onClick={onOpenFeatured}>Browse Featured</button>
+      </div> : <>
+        <div className="discover-services">
+          <button type="button" className="secondary" aria-pressed={serviceFilter}
+            disabled={Boolean(preferencesCache) && services.length === 0} onClick={() => setServiceFilter(value => !value)}>
+            Filter by my streaming services: {serviceFilter ? "On" : "Off"}
           </button>
+          <button className="secondary" onClick={onOpenAccount}>Manage tastes and services</button>
         </div>
-      </form>
-      <button type="button" className="secondary" aria-pressed={serviceFilter} disabled={loading} onClick={toggleServiceFilter}>
-        Filter by my streaming services: {serviceFilter ? "On" : "Off"}
-      </button>
-      {token && !submittedQuery && (
         <section className="recommendations" aria-label="Recommended titles">
-          <div className="section-heading">
-            <h2>For you</h2>
-            {recommendedBasis !== "genres" && <p className="muted small">Popular picks</p>}
-          </div>
-          {recommendedError ? (
-            <p className="muted">{recommendedError}</p>
-          ) : recommended === null ? (
-            <Skeleton label="Loading recommendations…" variant="posters" />
-          ) : recommended.length === 0 ? (
-            <p className="muted">No recommendations yet. Save a few genres in Account.</p>
-          ) : (
+          <div className="section-heading"><h2>For you</h2></div>
+          {recommendedError ? <div role="alert">
+            <p className="form-error">{recommendedError}</p>
+            <button className="secondary" onClick={() => setRetry(value => value + 1)}>Try again</button>
+          </div> : recommended === null ? <Skeleton label="Loading recommendations…" variant="posters" />
+            : recommended.length === 0 ? <div className="empty">
+              <h3>{serviceFilter ? "No picks on your saved services" : "Add a few favorites"}</h3>
+              <p>{serviceFilter ? "Turn off the service filter to see more picks." : "Pick genres in Account, or favorite a title or person while browsing."}</p>
+              <button className="secondary" onClick={onOpenFeatured}>Browse Featured</button>
+            </div> : (
             <div className="discover-results recommendation-grid">
               {recommended.map((item) => (
                 <button
                   key={`${item.media_type}-${item.id}`}
                   className="discover-result"
-                  onClick={() => openTitle(item.media_type, item.id)}
+                  onClick={() => onOpenTitle?.(item.media_type, item.id)}
                 >
                   <Poster name={item.name} posterPath={item.poster_path} size="w185" />
                   <span>
@@ -172,42 +90,7 @@ export default function Discover({
             </div>
           )}
         </section>
-      )}
-      {error && <p role="alert" className="form-error">{error}</p>}
-      {loading && !items && <Skeleton label="Loading search results…" variant="rows" />}
-      {items && items.length === 0 && <p className="muted">{serviceFilter ? "No matching titles on this page. Try another results page or turn off the filter." : "No titles found. Try another search."}</p>}
-      {submittedQuery && <div className="section-heading search-results-heading"><h2>Results for “{submittedQuery}”</h2><button className="text-button" onClick={() => { searchRequest.current += 1; setLoading(false); setSubmittedQuery(""); setItems(null); setQuery(""); setError(""); setResultPage(1); setTotalPages(0); }}>Clear search</button></div>}
-      <div className="discover-results">
-        {items?.map((item) => (
-          <button
-            key={`${item.media_type}-${item.id}`}
-            className="discover-result"
-            onClick={() => openTitle(item.media_type, item.id)}
-          >
-            <Poster name={item.name} posterPath={item.poster_path} size="w185" />
-            <span>
-              <strong>{item.name}</strong>
-              <small>
-                {item.media_type === "tv" ? "TV show" : "Movie"}
-                {formatYear(item.release_date) ? ` · ${formatYear(item.release_date)}` : ""}
-              </small>
-            </span>
-          </button>
-        ))}
-      </div>
-      {items && totalPages > 1 && <div className="pagination" aria-label="Search result pages">
-        <button className="secondary" disabled={loading || resultPage <= 1} onClick={() => void loadSearch(submittedQuery, resultPage - 1, serviceFilter)}>Previous page</button>
-        <span> Page {resultPage} of {totalPages} </span>
-        <button className="secondary" disabled={loading || resultPage >= Math.min(totalPages, 500)} onClick={() => void loadSearch(submittedQuery, resultPage + 1, serviceFilter)}>Next page</button>
-        {serviceFilter && <p className="muted small">Page numbers refer to all search results before filtering.</p>}
-      </div>}
-      <p className="discover-attribution">
-        Movie and TV data provided by{" "}
-        <a href="https://www.themoviedb.org/" target="_blank" rel="noreferrer">TMDB</a>. Watch availability
-        provided by <a href="https://www.justwatch.com/" target="_blank" rel="noreferrer">JustWatch</a>. This
-        product uses the TMDB API but is not endorsed or certified by TMDB.
-      </p>
-      {localTitle && <TitleDetails key={`${localTitle.media_type}:${localTitle.id}`} selection={localTitle} token={token} viewerId={viewerId} reloadKey={reloadKey} onClose={() => setLocalTitle(null)} onReview={onReview} onOpenProfile={onOpenProfile} onEdit={onEdit} onOpenTitle={openTitle} />}
+      </>}
     </section>
   );
 }

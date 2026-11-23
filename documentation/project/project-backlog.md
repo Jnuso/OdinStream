@@ -247,3 +247,7 @@ Still open: real email delivery, TMDB response caching, a responsive/accessibili
 ## Deferred / optional after MVP
 
 These are not initial MVP commitments: spoiler controls, viewing statistics, upcoming-episode calendars, release reminders, and viewing-history import/export. Private-account functionality is a decision still to be made, not an approved deferred feature.
+
+## Discover follow-up
+
+- Add an optional family-friendly filter to Discover. Define which ratings qualify and how the filter handles unrated titles before implementation.

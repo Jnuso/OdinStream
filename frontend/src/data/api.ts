@@ -1,5 +1,14 @@
 const base = (import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://127.0.0.1:8000" : "")).replace(/\/$/, "");
 
+export class ApiError extends Error {
+  readonly code?: string;
+
+  constructor(message: string, code?: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
 export async function api<T>(path: string, token?: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -12,7 +21,7 @@ export async function api<T>(path: string, token?: string, options: RequestInit 
   }
   if (!response.ok) {
     const data = await response.json().catch(() => null);
-    throw new Error(data?.message || "The request failed. Please try again.");
+    throw new ApiError(data?.message || "The request failed. Please try again.", data?.error);
   }
   return response.status === 204 ? (undefined as T) : response.json() as Promise<T>;
 }

@@ -3,26 +3,83 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../data/auth";
 import { api } from "../data/api";
 import Skeleton from "./Skeleton";
+import FavoritesPicker from "./FavoritesPicker";
+import StreamingServicePicker from "./StreamingServicePicker";
+import { favoriteKey, type Favorite } from "../data/favorites";
+import { preferenceOptions, type createPreferencesCache, type Preferences } from "../data/preferencesCache";
 
-type Preferences = { favorite_genres: string[]; streaming_services: string[] };
-const preferenceOptions = {
-  favorite_genres: ["Action", "Animation", "Comedy", "Documentary", "Drama", "Fantasy", "Horror", "Romance", "Science Fiction", "Thriller"],
-  streaming_services: ["Netflix", "Max", "Apple TV+", "Hulu", "Disney+"],
-};
+function AccountFavorites({ token }: { token: string }) {
+  const [items, setItems] = useState<Favorite[] | null>(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [expanded, setExpanded] = useState(false);
 
-function AccountPreferences({ token }: { token: string }) {
-  const [preferences, setPreferences] = useState<Preferences | null>(null);
+  useEffect(() => {
+    if (!expanded || items) return;
+    let active = true;
+    void Promise.all([
+      api<{ items: Favorite[] }>("/api/me/favorite-titles", token),
+      api<{ items: Favorite[] }>("/api/me/favorite-people", token),
+    ]).then(([titles, people]) => {
+      if (active) setItems([...titles.items, ...people.items]);
+    }).catch((err: unknown) => {
+      if (active) setError(err instanceof Error ? err.message : "Could not load favorites.");
+    });
+    return () => { active = false; };
+  }, [token, attempt, expanded, items]);
+
+  async function change(item: Favorite, method: "PUT" | "DELETE") {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    const path = item.media_type ? `favorite-titles/${item.media_type}/${item.id}` : `favorite-people/${item.id}`;
+    try {
+      await api(`/api/me/${path}`, token, { method });
+      setItems(previous => {
+        const remaining = (previous ?? []).filter(value => favoriteKey(value) !== favoriteKey(item));
+        return method === "PUT" ? [item, ...remaining] : remaining;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update favorites.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <section className="account-preferences preferences">
+    <h2>Recommendation favorites</h2>
+    <button type="button" className="secondary" aria-expanded={expanded}
+      onClick={() => setExpanded(value => !value)}>{expanded ? "Close favorites" : "Edit favorites"}</button>
+    {expanded && error && <p className="form-error" role="alert">{error}</p>}
+    {expanded && (items ? <FavoritesPicker selected={items} disabled={saving}
+      onAdd={item => void change(item, "PUT")} onRemove={item => void change(item, "DELETE")} />
+      : error ? <button type="button" className="secondary" onClick={() => {
+        setError("");
+        setAttempt(value => value + 1);
+      }}>Retry loading favorites</button>
+        : <Skeleton label="Loading favorites…" variant="form" />)}
+  </section>;
+}
+
+function AccountPreferences({ token, cache }: { token: string; cache?: ReturnType<typeof createPreferencesCache> }) {
+  const [preferences, setPreferences] = useState<Preferences | null>(() => cache?.peekFresh() ?? null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [reload, setReload] = useState(0);
   const tokenRef = useRef(token);
   tokenRef.current = token;
+  const cacheRef = useRef(cache);
+  cacheRef.current = cache;
 
   useEffect(() => {
     let active = true;
+    const currentCache = cacheRef.current;
+    const fresh = currentCache?.peekFresh();
+    if (fresh) { setPreferences(fresh); return; }
     setPreferences(null); setError(""); setMessage("");
-    api<Preferences>("/api/me/preferences", tokenRef.current)
+    (currentCache?.load() ?? api<Preferences>("/api/me/preferences", tokenRef.current))
       .then(data => { if (active) setPreferences(data); })
       .catch(err => { if (active) setError(err instanceof Error ? err.message : "Could not load preferences."); });
     return () => { active = false; };
@@ -43,6 +100,7 @@ function AccountPreferences({ token }: { token: string }) {
     setSaving(true); setError(""); setMessage("");
     try {
       const saved = await api<Preferences>("/api/me/preferences", tokenRef.current, { method: "PUT", body: JSON.stringify(preferences) });
+      cacheRef.current?.store(saved);
       setPreferences(saved); setMessage("Preferences saved.");
     } catch (err) { setError(err instanceof Error ? err.message : "Could not save preferences."); }
     finally { setSaving(false); }
@@ -52,10 +110,15 @@ function AccountPreferences({ token }: { token: string }) {
   if (preferences) content = (
       <form onSubmit={save}>
         {!preferences.favorite_genres.length && !preferences.streaming_services.length && <p>Choose favorites to personalize your account, or leave them empty for now.</p>}
-        {([ ["favorite_genres", "Favorite genres"], ["streaming_services", "Streaming services"] ] as const).map(([key, label]) =>
-          <fieldset key={key} disabled={saving}><legend>{label}</legend>
-            {preferenceOptions[key].map(option => <label className="service-check" key={option}><input type="checkbox" checked={preferences[key].includes(option)} onChange={() => toggle(key, option)} />{option}</label>)}
-          </fieldset>)}
+        <fieldset disabled={saving}><legend>Favorite genres</legend>
+          {preferenceOptions.favorite_genres.map(option => <label className="service-check" key={option}>
+            <input type="checkbox" checked={preferences.favorite_genres.includes(option)}
+              onChange={() => toggle("favorite_genres", option)} />{option}
+          </label>)}
+        </fieldset>
+        <fieldset disabled={saving}><legend>Streaming services</legend>
+          <StreamingServicePicker selected={preferences.streaming_services} onToggle={name => toggle("streaming_services", name)} />
+        </fieldset>
         <p className="muted">Availability is limited to the United States.</p>
         <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save preferences"}</button>
         {message && <p role="status">{message}</p>}
@@ -128,9 +191,10 @@ function DeleteAccount({ token, onDeleted }: { token: string; onDeleted: () => v
   );
 }
 
-export default function Account({ session, recovery, callbackError, onClearCallbackError, onRecoveryComplete, onDeleted }: {
+export default function Account({ session, recovery, callbackError, onClearCallbackError, onRecoveryComplete, onDeleted, preferencesCache }: {
   session: Session | null; recovery: boolean; callbackError: string | null;
   onClearCallbackError: () => void; onRecoveryComplete: () => void; onDeleted: () => void;
+  preferencesCache?: ReturnType<typeof createPreferencesCache>;
 }) {
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
@@ -181,7 +245,7 @@ export default function Account({ session, recovery, callbackError, onClearCallb
   if (session && mode !== "recovery") return <section className="account-page"><div className="page-heading"><div><h1>Account</h1><p>Your preferences and sign-in details, all in one place.</p></div></div>{callbackError && <p className="form-error" role="alert">{callbackError}</p>}<div className="account-summary"><div><h2>Signed in</h2><p>{session.user.email}</p></div><button className="secondary" onClick={async () => {
     const { error } = await client.auth.signOut();
     if (error) setError(error.message);
-  }}>Sign out</button></div>{error && <p className="form-error" role="alert">{error}</p>}<AccountPreferences key={session.user.id} token={session.access_token} /><DeleteAccount token={session.access_token} onDeleted={onDeleted} /></section>;
+  }}>Sign out</button></div>{error && <p className="form-error" role="alert">{error}</p>}<AccountPreferences key={session.user.id} token={session.access_token} cache={preferencesCache} /><AccountFavorites key={`favorites-${session.user.id}`} token={session.access_token} /><DeleteAccount token={session.access_token} onDeleted={onDeleted} /></section>;
 
   return <section className="account-page account-auth"><span className="eyebrow">Your next watch starts here</span><h1>{mode === "signup" ? "Create account" : mode === "reset" ? "Reset password" : mode === "recovery" ? "Choose a new password" : "Welcome back"}</h1><p className="muted">{mode === "signup" ? "Save your favorites and share what’s worth watching." : mode === "signin" ? "Sign in to your library, reviews, and recommendations." : "Let’s get you back into your account."}</p>
     <form className="composer account-form" onSubmit={submit}>

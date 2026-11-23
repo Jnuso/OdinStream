@@ -27,7 +27,7 @@ class AccountDeletionTest(unittest.TestCase):
         self.signing = "a-test-secret-that-is-longer-than-32-bytes"
         self.settings = Settings("https://example.supabase.co", self.signing, "", ())
         app.dependency_overrides[get_settings] = lambda: self.settings
-        self.client = TestClient(app)
+        self.client = TestClient(app, client=(unittest.TestCase.id(self), 50000))
         token = jwt.encode({"sub": self.id, "email": "viewer@example.test", "aud": "authenticated",
                             "iss": self.settings.issuer, "exp": int(time.time()) + 600,
                             "role": "authenticated"}, self.signing, algorithm="HS256")

@@ -1,6 +1,8 @@
-export default function NavIcon({ name }: { name: "discover" | "library" | "feed" | "profile" | "account" | "plus" }) {
+export default function NavIcon({ name }: { name: "featured" | "search" | "discover" | "library" | "feed" | "profile" | "account" | "plus" }) {
   const paths = {
-    discover: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4.5 4.5" /></>,
+    featured: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m10 8 6 4-6 4z" /></>,
+    discover: <><circle cx="12" cy="12" r="9" /><path d="m15 9-2 4-4 2 2-4z" /></>,
+    search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4.5 4.5" /></>,
     library: <><rect x="4" y="4" width="5" height="16" rx="1" /><path d="M12 4v16m4-15 4 14" /></>,
     feed: <><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 9h8m-8 4h8m-8 4h4" /></>,
     profile: <><circle cx="12" cy="8" r="4" /><path d="M4 21v-2a8 8 0 0 1 16 0v2" /></>,

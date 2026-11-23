@@ -163,7 +163,7 @@ class TestRateLimiting(unittest.TestCase):
                 app,
                 method="DELETE",
                 path="/api/me",
-                headers=[(b"x-forwarded-for", b"203.0.113.10, 10.0.0.1")],
+                client=("testclient", 12345),
             )
             self.assertEqual(status, 200)
             self.assertEqual(headers.get("x-ratelimit-limit"), "5")
@@ -172,7 +172,8 @@ class TestRateLimiting(unittest.TestCase):
             app,
             method="DELETE",
             path="/api/me",
-            headers=[(b"x-forwarded-for", b"203.0.113.10, 10.0.0.1")],
+            client=("testclient", 12345),
+            headers=[(b"x-forwarded-for", b"203.0.113.10")],
         )
         self.assertEqual(status, 429)
         self.assertIn("retry-after", headers)
@@ -197,6 +198,15 @@ class TestRequestLoggingMiddleware(unittest.TestCase):
         joined = "\n".join(cm.output)
         self.assertIn("req-abc-123", joined)
         self.assertNotIn("super-secret-jwt-token", joined)
+
+    def test_non_ascii_request_id_is_replaced(self) -> None:
+        status, headers, _ = _run_asgi(
+            RequestLoggingMiddleware(_echo_app),
+            method="POST",
+            headers=[(b"x-request-id", bytes([233]))],
+        )
+        self.assertEqual(status, 200)
+        self.assertRegex(headers["x-request-id"], r"^[0-9a-f]{16}$")
 
     def test_rejects_malformed_caller_request_id(self) -> None:
         app = RequestLoggingMiddleware(_echo_app)

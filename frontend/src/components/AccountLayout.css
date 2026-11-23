@@ -18,13 +18,13 @@
 }
 
 .onboarding-brand span {
-  color: #d5eaa2;
+  color: var(--accent);
   font-weight: 400;
 }
 
 .onboarding-panel {
   padding: 36px;
-  background: #171c18;
+  background: #1b1b1e;
   border: 1px solid #ffffff12;
   border-radius: 16px;
 }
@@ -43,7 +43,7 @@
 
 .setup-heading p,
 .account-status p {
-  color: #b1bca8;
+  color: var(--muted);
   font-size: 16px;
   line-height: 1.65;
 }
@@ -71,7 +71,7 @@
 }
 
 .setup-annotation {
-  color: #a5b098;
+  color: var(--muted);
   font-size: 13px;
   font-weight: 400;
 }
@@ -83,13 +83,13 @@
   padding: 12px 14px;
   border: 1px solid #ffffff26;
   border-radius: 7px;
-  background: #101510;
+  background: #141416;
   color: #efeee8;
   outline-offset: 3px;
 }
 
 .setup-hint {
-  color: #a5b098;
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -117,8 +117,8 @@
 }
 
 .setup-privacy-option:has(input:checked) {
-  border-color: #d5eaa280;
-  background: #d5eaa208;
+  border-color: #efb76a80;
+  background: #efb76a08;
 }
 
 .setup-privacy-option strong,
@@ -133,7 +133,7 @@
 }
 
 .setup-privacy-option small {
-  color: #b1bca8;
+  color: var(--muted);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -145,21 +145,8 @@
   padding: 0;
   margin: 2px 0 0;
   flex-shrink: 0;
-  accent-color: #d5eaa2;
+  accent-color: var(--accent);
   outline-offset: 3px;
-}
-
-.setup-preferences {
-  display: grid;
-  gap: 24px;
-  padding-top: 28px;
-  border-top: 1px solid #ffffff12;
-}
-
-.setup-preferences h2 {
-  margin: 0 0 6px;
-  font-size: 18px;
-  font-weight: 600;
 }
 
 .setup-choices {
@@ -179,6 +166,73 @@
 
 .setup-choice input[type="checkbox"] {
   margin-top: 0;
+}
+
+.setup-heading .setup-progress {
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.favorite-picker {
+  border: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.favorite-search-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 12px;
+}
+
+.favorite-search-fields select {
+  width: 100%;
+  min-height: 48px;
+}
+
+.favorite-results,
+.favorite-picks {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+}
+
+.favorite-results li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line, #ffffff26);
+}
+
+.favorite-results li > span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.favorite-results small {
+  display: block;
+  opacity: .75;
+}
+
+.favorite-results img {
+  width: 32px;
+  height: 44px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.favorite-paging,
+.favorite-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.favorite-picks button {
+  overflow-wrap: anywhere;
 }
 
 .setup-actions {
@@ -207,8 +261,8 @@
   width: 36px;
   height: 36px;
   margin: 0 auto 24px;
-  border: 3px solid #d5eaa226;
-  border-top-color: #d5eaa2;
+  border: 3px solid #efb76a26;
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: account-status-spin 0.9s linear infinite;
 }
@@ -226,6 +280,7 @@
 }
 
 @media (max-width: 480px) {
+  .favorite-search-fields { grid-template-columns: minmax(0, 1fr); }
   .onboarding-page { padding: 28px 16px 40px; }
   .onboarding-brand { margin-bottom: 24px; }
   .onboarding-panel { padding: 24px 20px; }

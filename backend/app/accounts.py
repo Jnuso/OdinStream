@@ -1,7 +1,9 @@
 """Signed-in account identity and preferences."""
 
 import logging
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated, Any, Literal
 
 import psycopg
@@ -81,12 +83,31 @@ def update_preferences(
     if not isinstance(body, dict):
         raise APIError(422, "invalid_preferences", "Preferences must be an object.")
     genres = normalize_choices(body.get("favorite_genres"), FAVORITE_GENRES, "Favorite genres")
-    services = normalize_choices(
-        body.get("streaming_services"),
-        STREAMING_SERVICES,
-        "Streaming services",
-    )
+    services = normalize_streaming_services(body.get("streaming_services"), user, store)
     return store.save(user.id, genres, services)
+
+
+def normalize_streaming_services(
+    values: object, user: AuthenticatedUser | None = None, store: PreferenceStore | None = None,
+) -> list[str]:
+    allowed = STREAMING_SERVICES
+    if isinstance(values, list) and any(isinstance(name, str) and name not in allowed for name in values):
+        from app.catalog import streaming_providers
+
+        if store is not None and user is not None:
+            allowed += tuple(store.get(user.id)["streaming_services"])
+        if os.environ.get("TMDB_READ_ACCESS_TOKEN", "").strip() and any(name not in allowed for name in values):
+            allowed += tuple(item["name"] for item in streaming_providers())
+    return normalize_choices(values, allowed, "Streaming services")
+
+
+FavoriteId = Annotated[int, Field(strict=True, gt=0, le=2147483647)]
+
+
+class SetupTitle(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    media_type: Literal["movie", "tv"]
+    id: FavoriteId
 
 
 class SetupInput(BaseModel):
@@ -95,6 +116,23 @@ class SetupInput(BaseModel):
     visibility: Literal["public", "private"]
     favorite_genres: list[str] = Field(default_factory=list)
     streaming_services: list[str] = Field(default_factory=list)
+    favorite_titles: list[SetupTitle] = Field(default_factory=list)
+    favorite_people: list[FavoriteId] = Field(default_factory=list)
+
+
+def verify_setup_favorites(body: SetupInput) -> tuple[list[dict], list[dict]]:
+    # Catalog depends on the account authentication dependency.
+    from app.catalog import person_details
+    from app.favorite_titles import verify_title
+
+    title_keys = dict.fromkeys((title.media_type, title.id) for title in body.favorite_titles)
+    person_ids = dict.fromkeys(body.favorite_people)
+    if not title_keys and not person_ids:
+        return [], []
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        titles = list(pool.map(lambda key: verify_title(*key), title_keys))
+        people = list(pool.map(person_details, person_ids))
+    return titles, people
 
 
 @router.get("/setup")
@@ -114,9 +152,13 @@ def complete_setup(
     if not re.fullmatch(r"[A-Za-z0-9_.]{3,30}", username):
         raise APIError(422, "invalid_username", "Usernames use 3-30 letters, numbers, dots or underscores.")
     genres = normalize_choices(body.favorite_genres, FAVORITE_GENRES, "Favorite genres")
-    services = normalize_choices(body.streaming_services, STREAMING_SERVICES, "Streaming services")
+    services = normalize_streaming_services(body.streaming_services)
     if not settings.database_url:
         raise APIError(503, "account_unavailable", "Account setup is not configured.")
+    from app.favorite_people import insert_person
+    from app.favorite_titles import insert_title
+
+    titles, people = verify_setup_favorites(body)
     try:
         with user_connection(settings.database_url, user.id) as conn:
             row = conn.execute(
@@ -133,6 +175,10 @@ def complete_setup(
                 set favorite_genres = excluded.favorite_genres, streaming_services = excluded.streaming_services""",
                 (user.id, genres, services),
             )
+            for title in titles:
+                insert_title(conn, user.id, title)
+            for person in people:
+                insert_person(conn, user.id, person)
     except psycopg.errors.UniqueViolation as exc:
         raise APIError(409, "duplicate_handle", "That username is already taken.") from exc
     except psycopg.Error as exc:

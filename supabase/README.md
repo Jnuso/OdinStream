@@ -11,9 +11,17 @@ npx --yes supabase@2.95.3 test db
 
 Tests run inside a transaction and roll back their changes. `supabase db reset` recreates the local database and deletes its local data; never use it against a hosted database. The local config uses PostgreSQL 17, matching the OdinStream development project's reported major version. Confirm the target and version again before connecting or deploying elsewhere.
 
-## GitHub Actions: development migrations
+## GitHub Actions migrations
 
 `.github/workflows/database-migrations.yml` tests migrations and database policies in a local PostgreSQL instance on pull requests. After the tests pass on a push to `main` involving `supabase/` or the workflow, it applies pending migrations to the configured development project. A manual run is allowed only for `main` and can apply pending migrations; it is not a dry run. Deployments are serialized. Do not use this environment for production.
+
+### Develop branch deployment
+
+`.github/workflows/database-migrations-develop.yml` runs on pushes to `develop` that change `supabase/` or the workflow itself. It runs the local database tests first, then applies pending migrations using the `develop-branch` GitHub environment.
+
+Allow the `develop` branch in that environment and set its `SUPABASE_DB_URL` secret to the session pooler connection string for the Supabase project used by the develop app. Check that this is a separate project from the one used by `main`. Use this workflow as the sole automatic migration runner for the develop database. Verify both jobs in the **Database migrations (develop)** Actions run after pushing.
+
+### Existing main workflow setup
 
 Before merging the first migration, a repository administrator should:
 

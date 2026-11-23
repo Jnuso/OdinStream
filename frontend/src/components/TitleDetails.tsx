@@ -3,8 +3,11 @@ import Modal from "./Modal";
 import Poster from "./Poster";
 import PostCard from "./PostCard";
 import Skeleton from "./Skeleton";
+import ActorCredits, { ActorPortrait, type Actor, type CreditRole } from "./ActorCredits";
 import { api } from "../data/api";
 import { formatYear, type MediaType, type Post, type TitleSummary } from "../data/social";
+
+const CAST_PAGE_SIZE = 12;
 
 type Title = {
   id: number;
@@ -19,16 +22,42 @@ type Details = Title & {
   genres: string[];
   seasons: { season_number: number; name: string; episode_count: number }[];
   availability: { link: string | null; flatrate: string[]; rent: string[]; buy: string[] };
+  cast?: { id: number; name: string; profile_path: string | null; characters: string[] }[];
+  creators?: Actor[];
+  directors?: Actor[];
 };
-type Episode = { episode_number: number; name: string; overview: string; air_date: string | null };
+type Episode = { episode_number: number; name: string; overview: string; air_date: string | null; directors?: Actor[] };
 type SavedTitle = { media_type: MediaType; tmdb_id: number; status: string };
 type LibraryCheck = { token: string; mediaType: MediaType; id: number; status: string | null; error?: string };
 
-export default function TitleDetails({ selection, token, viewerId, reloadKey = 0, onClose, onReview, onOpenProfile, onEdit, onOpenTitle }: {
+function PeopleCredits({ people, label, onSelect, Heading = "h3" }: {
+  people?: Actor[]; label: string; onSelect: (person: Actor) => void; Heading?: "h3" | "h4";
+}) {
+  if (!people?.length) return null;
+  return (
+    <section className="title-cast">
+      <Heading>{label}</Heading>
+      <ul className="title-cast-list">
+        {people.map(person => (
+          <li key={person.id}>
+            <button className="title-cast-card" onClick={() => onSelect(person)}>
+              <ActorPortrait actor={person} size="w185" />
+              <strong>{person.name}</strong>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+export default function TitleDetails({ selection, token, viewerId, reloadKey = 0, onClose, onReview, onOpenProfile, onEdit, onOpenTitle, onSaved, onFavoriteChange }: {
   selection: { media_type: MediaType; id: number }; token: string | null; viewerId?: string; reloadKey?: number;
   onClose: () => void; onReview?: (title: TitleSummary) => void;
   onOpenProfile?: (id: string) => void; onEdit?: (post: Post) => void;
   onOpenTitle: (type: MediaType, id: number) => void;
+  onSaved?: () => void;
+  onFavoriteChange?: () => void;
 }) {
   const [detail, setDetail] = useState<Details | null>(null);
   const [detailError, setDetailError] = useState("");
@@ -41,6 +70,10 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
   const [reviewError, setReviewError] = useState("");
   const [libraryCheck, setLibraryCheck] = useState<LibraryCheck | null>(null);
   const [libraryRetry, setLibraryRetry] = useState(0);
+  const [visibleCastCount, setVisibleCastCount] = useState(CAST_PAGE_SIZE);
+  const [selectedPerson, setSelectedPerson] = useState<{ person: Actor; role: CreditRole } | null>(null);
+  const openDirector = (person: Actor) => setSelectedPerson({ person, role: "director" });
+  const cast = detail?.cast ?? [];
   const detailRequest = useRef(0);
   const seasonRequest = useRef(0);
   const currentLibraryCheck = detail && libraryCheck?.token === token && libraryCheck.mediaType === detail.media_type && libraryCheck.id === detail.id ? libraryCheck : null;
@@ -76,6 +109,7 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
         method: "POST",
         body: JSON.stringify({ media_type: detail.media_type, tmdb_id: detail.id, status: "watchlist" }),
       });
+      onSaved?.();
       if (request !== detailRequest.current) return;
       setSaveMessage("Added to your watchlist.");
       setLibraryCheck({ token, mediaType: detail.media_type, id: detail.id, status: "watchlist" });
@@ -119,7 +153,7 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
     return () => { active = false; };
   }, [detail, token, libraryRetry]);
 
-  return <Modal className="title-dialog" label={detail ? `${detail.name} details` : "Title details"} onClose={onClose}>
+  return <><Modal className="title-dialog" label={detail ? `${detail.name} details` : "Title details"} onClose={onClose}>
     {detailError ? <><h2>Couldn’t load this title</h2><p className="form-error" role="alert">{detailError}</p><button className="secondary" onClick={() => { setDetailError(""); setDetailRetry(value => value + 1); }}>Try again</button></>
       : !detail ? <Skeleton label="Loading title details…" variant="rows" count={1} />
       : <>
@@ -134,64 +168,66 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
               </p>
               {detail.genres.length > 0 && <p>{detail.genres.join(" · ")}</p>}
               <p>{detail.overview || "No description available."}</p>
+            <div className="discover-save">
+              {token ? (
+                <>
+                {currentLibraryCheck?.error ? <button className="secondary" onClick={() => { setLibraryCheck(null); setLibraryRetry(value => value + 1); }}>Retry library check</button> : <button className={currentLibraryCheck?.status ? "secondary" : "primary"} disabled={saving || !currentLibraryCheck || !!currentLibraryCheck.status} onClick={saveTitle}>
+                  {saving ? "Adding…" : !currentLibraryCheck ? "Checking library…" : currentLibraryCheck.status === "watchlist" ? "✓ In your watchlist" : currentLibraryCheck.status ? ({ watching: "Watching", watched: "Watched", completed: "Completed", paused: "Paused", dropped: "Dropped" }[currentLibraryCheck.status] ?? "In your library") : "Add to watchlist"}
+                </button>}
+                {onReview && <button className="secondary" onClick={() => {
+                  const own = reviewPosts?.find(post => post.author.id === viewerId);
+                  if (own && onEdit) onEdit(own); else onReview(detail);
+                }}>{onEdit && reviewPosts?.some(post => post.author.id === viewerId) ? "Edit your review" : "Write a review"}</button>}
+                </>
+              ) : (
+                <p>Sign in from Account to save this title.</p>
+              )}
+              {saveMessage && <p role="status">{saveMessage}</p>}
+              {currentLibraryCheck?.error && <p className="form-error" role="alert">{currentLibraryCheck.error}</p>}
+            </div>
             </div>
           </div>
-          <div className="discover-save">
-            {token ? (
-              <>
-              {currentLibraryCheck?.error ? <button className="secondary" onClick={() => { setLibraryCheck(null); setLibraryRetry(value => value + 1); }}>Retry library check</button> : <button className={currentLibraryCheck?.status ? "secondary" : "primary"} disabled={saving || !currentLibraryCheck || !!currentLibraryCheck.status} onClick={saveTitle}>
-                {saving ? "Adding…" : !currentLibraryCheck ? "Checking library…" : currentLibraryCheck.status === "watchlist" ? "✓ In your watchlist" : currentLibraryCheck.status ? ({ watching: "Watching", watched: "Watched", completed: "Completed", paused: "Paused", dropped: "Dropped" }[currentLibraryCheck.status] ?? "In your library") : "Add to watchlist"}
-              </button>}
-              {onReview && <button className="secondary" onClick={() => {
-                const own = reviewPosts?.find(post => post.author.id === viewerId);
-                if (own && onEdit) onEdit(own); else onReview(detail);
-              }}>{onEdit && reviewPosts?.some(post => post.author.id === viewerId) ? "Edit your review" : "Write a review"}</button>}
-              </>
-            ) : (
-              <p>Sign in from Account to save this title.</p>
-            )}
-            {saveMessage && <p role="status">{saveMessage}</p>}
-            {currentLibraryCheck?.error && <p className="form-error" role="alert">{currentLibraryCheck.error}</p>}
-          </div>
-          <section className="discover-watch">
-            <h3>Where to watch in the United States</h3>
-            {([
-              ["flatrate", "Stream"],
-              ["rent", "Rent"],
-              ["buy", "Buy"],
-            ] as const).map(
-              ([key, label]) =>
-                detail.availability[key].length > 0 && (
-                  <p key={key}>
-                    <strong>{label}:</strong> {detail.availability[key].join(", ")}
-                  </p>
-                ),
-            )}
-            {!detail.availability.flatrate.length &&
-              !detail.availability.rent.length &&
-              !detail.availability.buy.length && (
-                <p>Availability information is not available for this country.</p>
+          <div className="title-detail-panels">
+            <section className="discover-watch">
+              <h3>Where to watch in the United States</h3>
+              {([
+                ["flatrate", "Stream"],
+                ["rent", "Rent"],
+                ["buy", "Buy"],
+              ] as const).map(
+                ([key, label]) =>
+                  detail.availability[key].length > 0 && (
+                    <p key={key}>
+                      <strong>{label}:</strong> {detail.availability[key].join(", ")}
+                    </p>
+                  ),
               )}
-            {detail.availability.link && (
-              <a href={detail.availability.link} target="_blank" rel="noreferrer">
-                View watch options on TMDB
-              </a>
-            )}
-            <p className="muted">Availability data provided by JustWatch.</p>
-          </section>
-          <section className="title-reviews">
-            <h3>Ratings &amp; reviews</h3>
-            {!token ? <p className="muted">Sign in to read and share reviews.</p>
-              : reviewError ? <p className="form-error" role="alert">{reviewError}</p>
-              : reviewPosts === null ? <Skeleton label="Loading reviews…" variant="posts" count={2} />
-              : reviewPosts.length === 0 ? <p className="muted">No reviews yet. Share what you thought.</p>
-              : <div className="post-list">{reviewPosts.map(post => (
-                <PostCard key={post.id} post={post} isOwn={false}
-                  onOpenProfile={id => { onClose(); onOpenProfile?.(id); }}
-                  onOpenTitle={onOpenTitle}
-                  onEdit={() => {}} onDelete={() => {}} />
-              ))}</div>}
-          </section>
+              {!detail.availability.flatrate.length &&
+                !detail.availability.rent.length &&
+                !detail.availability.buy.length && (
+                  <p>Availability information is not available for this country.</p>
+                )}
+              {detail.availability.link && (
+                <a href={detail.availability.link} target="_blank" rel="noreferrer">
+                  View watch options on TMDB
+                </a>
+              )}
+              <p className="muted">Availability data provided by JustWatch.</p>
+            </section>
+            <section className="title-reviews">
+              <h3>Ratings &amp; reviews</h3>
+              {!token ? <p className="muted">Sign in to read and share reviews.</p>
+                : reviewError ? <p className="form-error" role="alert">{reviewError}</p>
+                : reviewPosts === null ? <Skeleton label="Loading reviews…" variant="posts" count={2} />
+                : reviewPosts.length === 0 ? <p className="muted">No reviews yet. Share what you thought.</p>
+                : <div className="post-list">{reviewPosts.map(post => (
+                  <PostCard key={post.id} post={post} isOwn={false}
+                    onOpenProfile={id => { onClose(); onOpenProfile?.(id); }}
+                    onOpenTitle={onOpenTitle}
+                    onEdit={() => {}} onDelete={() => {}} />
+                ))}</div>}
+            </section>
+          </div>
           {detail.seasons.length > 0 && (
             <section className="discover-seasons">
               <h3>Seasons</h3>
@@ -209,6 +245,7 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
                         <strong>{episode.name || `Episode ${episode.episode_number}`}</strong>
                         {episode.air_date && ` · ${episode.air_date}`}
                         {episode.overview && <p>{episode.overview}</p>}
+                        <PeopleCredits people={episode.directors} label="Directed by" Heading="h4" onSelect={openDirector} />
                       </li>
                     ))}
                   </ol>
@@ -217,6 +254,39 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
                 ))}
             </section>
           )}
+          {detail.media_type === "tv"
+            ? <PeopleCredits people={detail.creators} label="Created by" onSelect={person => setSelectedPerson({ person, role: "creator" })} />
+            : <PeopleCredits people={detail.directors} label="Directed by" onSelect={openDirector} />}
+          {(detail.media_type === "tv" || cast.length > 0) && (
+            <section className="title-cast">
+              <h3>Cast</h3>
+              {cast.length === 0 ? <p className="muted">Cast information is unavailable.</p> : (
+                <ul className="title-cast-list">
+                  {cast.slice(0, visibleCastCount).map(actor => (
+                    <li key={actor.id}>
+                      <button className="title-cast-card" onClick={() => setSelectedPerson({ person: actor, role: "acting" })}>
+                        <ActorPortrait actor={actor} size="w185" />
+                        <strong>{actor.name}</strong>
+                        {actor.characters.length > 0 && <span className="muted">{actor.characters.join(", ")}</span>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {cast.length > visibleCastCount && (
+                <button className="secondary" onClick={() => setVisibleCastCount(count => count + CAST_PAGE_SIZE)}>
+                  Show more cast
+                </button>
+              )}
+            </section>
+          )}
       </>}
-  </Modal>;
+  </Modal>
+    {selectedPerson && (
+      <ActorCredits key={`${selectedPerson.role}:${selectedPerson.person.id}`} actor={selectedPerson.person}
+        role={selectedPerson.role} currentTitle={{ ...selection, name: detail?.name }}
+        token={token} onFavoriteChange={onFavoriteChange}
+        onClose={() => setSelectedPerson(null)} onOpenTitle={onOpenTitle} />
+    )}
+  </>;
 }

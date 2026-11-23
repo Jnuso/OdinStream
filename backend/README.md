@@ -34,7 +34,7 @@ GitHub Actions runs the same suite on pushes, pull requests, and manual runs. It
 - **Defensive middleware (`backend/app/security_middleware.py`):**
   - Baseline HTTP security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`).
   - `Cache-Control: private, no-store` on `/api/me*` and any request carrying an `Authorization` header (using ASGI `scope["path"]` to prevent Host-header path divergence).
-  - 64 KB max JSON payload limit (`413`) and per-IP sliding-window rate limiting (`429` + `Retry-After`; set `RATE_LIMIT_ENABLED=false` to disable in local load tests).
+  - 64 KB max JSON payload limit (`413`) and per-IP sliding-window rate limiting (`429` + `Retry-After`; set `RATE_LIMIT_ENABLED=false` to disable in local load tests). Behind a reverse proxy, configure Uvicorn via `FORWARDED_ALLOW_IPS` with trusted proxy addresses or networks so clients receive separate limits. Restrict the list to proxies that control the forwarding chain.
   - `X-Request-ID` correlation header and structured request logging (without logging `Authorization` headers or tokens).
 - **Live post-deploy smoke test (`tests/test_deploy_smoke.py`):** Run right after Render deploys using only the Python standard library:
   ```bash

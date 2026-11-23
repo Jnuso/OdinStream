@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { authCallbackError, supabase } from "./data/auth";
 import { useNavigation, type Page } from "./data/navigation";
 import {
   avatarColor,
+  fetchFeed,
   fetchMyProfile,
+  fetchProfilePosts,
   fetchSuggestedProfiles,
   initials,
   setFollow,
@@ -18,16 +20,24 @@ import Setup from "./components/Setup";
 import { AccountStatus } from "./components/AccountLayout";
 import { api } from "./data/api";
 import Discover from "./components/Discover";
+import Featured from "./components/Featured";
+import CatalogSearch from "./components/CatalogSearch";
+import ActorCredits, { type Actor, type CreditRole } from "./components/ActorCredits";
 import Feed from "./components/Feed";
 import Library from "./components/Library";
+import FavoritePeople from "./components/FavoritePeople";
 import PostComposer from "./components/PostComposer";
 import ProfileScreen from "./components/Profile";
 import TitleDetails from "./components/TitleDetails";
 import NavIcon from "./components/NavIcon";
 import "./App.css";
 import "./SiteRefinements.css";
+import "./Cinema.css";
 import FollowRequests, { RequestBadge } from "./components/FollowRequests";
 import { useFollowRequests } from "./data/useFollowRequests";
+import { createLibraryCache } from "./data/libraryCache";
+import { createPageCache } from "./data/pageCache";
+import { createPreferencesCache } from "./data/preferencesCache";
 
 type Focus = { media_type: MediaType; id: number };
 
@@ -61,7 +71,40 @@ export default function App() {
   const { page, feed, profileId, navigate } = useNavigation();
   const token = session?.access_token ?? null;
   const viewerId = session?.user.id ?? "";
+  const libraryCache = useMemo(() => createLibraryCache(token), [token]);
+  const preferencesCache = useMemo(() => token ? createPreferencesCache(token) : undefined, [token]);
+  const feedCache = useMemo(() => createPageCache(() => fetchFeed(token!, feed)), [token, feed, reloadKey]);
+  const ownProfile = useMemo(() => ({
+    summary: createPageCache(() => fetchMyProfile(token!)),
+    posts: createPageCache(() => fetchProfilePosts(token!, viewerId)),
+  }), [token, viewerId, reloadKey]);
+  const [libraryVersion, setLibraryVersion] = useState(0);
+  const [favoriteVersion, setFavoriteVersion] = useState(0);
+  const refreshFavorites = () => setFavoriteVersion(value => value + 1);
+  const [featuredReady, setFeaturedReady] = useState(false);
+  const [person, setPerson] = useState<{ actor: Actor; role: CreditRole } | null>(null);
   const viewingOwnProfile = page === "profile" && (profileId === "me" || profileId === viewerId);
+
+  useEffect(() => {
+    if (page !== "featured") {
+      setFeaturedReady(false);
+      return;
+    }
+    if (!featuredReady || !token || setup?.id !== viewerId || setup.status !== "ready" || recovery || !preferencesCache) return;
+    let active = true;
+    void (async () => {
+      for (const cache of [libraryCache.pages["in-progress"], feedCache, ownProfile.posts, preferencesCache]) {
+        if (!active) break;
+        await cache.load().catch(() => {});
+      }
+    })();
+    return () => { active = false; };
+  }, [featuredReady, feedCache, libraryCache, ownProfile, preferencesCache, page, recovery, setup, token, viewerId]);
+
+  useEffect(() => {
+    setFocus(null);
+    setPerson(null);
+  }, [page, profileId]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -83,10 +126,17 @@ export default function App() {
   useEffect(() => {
     if (!token || !viewerId) { setSetup(null); return; }
     let active = true;
-    setSetup({ id: viewerId, status: "checking" });
+    setSetup(previous => previous?.id === viewerId && previous.status !== "error"
+      ? previous : { id: viewerId, status: "checking" });
     api<{ setup_complete: boolean }>("/api/me/setup", token)
-      .then(data => { if (active) setSetup({ id: viewerId, status: data.setup_complete ? "ready" : "needed" }); })
-      .catch(() => { if (active) setSetup({ id: viewerId, status: "error" }); });
+      .then(data => {
+        if (active) setSetup(previous => previous?.id === viewerId && previous.status === "ready"
+          ? previous : { id: viewerId, status: data.setup_complete ? "ready" : "needed" });
+      })
+      .catch(() => {
+        if (active) setSetup(previous => previous?.id === viewerId && previous.status !== "checking"
+          ? previous : { id: viewerId, status: "error" });
+      });
     return () => { active = false; };
   }, [token, viewerId, setupRetry]);
 
@@ -97,12 +147,12 @@ export default function App() {
       return;
     }
     let active = true;
-    fetchMyProfile(token).then((profile) => active && setMe(profile)).catch(() => active && setMe(null));
+    ownProfile.summary.load().then((profile) => active && setMe(profile)).catch(() => active && setMe(null));
     fetchSuggestedProfiles(token).then((items) => active && setSuggested(items)).catch(() => active && setSuggested([]));
     return () => {
       active = false;
     };
-  }, [token, reloadKey, setup, viewerId]);
+  }, [token, ownProfile, setup, viewerId]);
 
   useEffect(() => {
     if (!notice) return;
@@ -156,7 +206,10 @@ export default function App() {
     if (setup.status === "error") return <AccountStatus error
       onRetry={() => setSetupRetry(value => value + 1)}
       onSignOut={() => { void supabase?.auth.signOut(); }} />;
-    if (setup.status === "needed") return <Setup token={token} onComplete={() => setSetup({ id: viewerId, status: "ready" })}
+    if (setup.status === "needed") return <Setup key={viewerId} token={token} onComplete={() => {
+      setPage("discover");
+      setSetup({ id: viewerId, status: "ready" });
+    }}
       onSignOut={() => { void supabase?.auth.signOut(); }} />;
   }
 
@@ -175,13 +228,14 @@ export default function App() {
       <aside className="sidebar">
         <a
           className="brand"
-          href="#/discover"
+          href="#/featured"
           onClick={(event) => {
             event.preventDefault();
-            setPage("discover");
+            setPage("featured");
           }}
         >
           <span className="brand-mark" aria-hidden="true">
+            <span className="desktop-brand-letter">O</span>
             <svg viewBox="0 0 24 24" width="22" height="22" focusable="false">
               <path
                 d="M6 18 18 6M6 6h12v12"
@@ -193,10 +247,12 @@ export default function App() {
               />
             </svg>
           </span>
-          Odin<span>Stream</span>
+          <span>Odin Stream</span>
         </a>
-        <div className="nav-label">Navigation</div>
         <nav aria-label="Main navigation">
+          <button className={`nav-item ${page === "featured" ? "active" : ""}`} aria-current={page === "featured" ? "page" : undefined} onClick={() => setPage("featured")}>
+            <NavIcon name="featured" />Featured
+          </button>
           <button className={`nav-item ${page === "discover" ? "active" : ""}`} aria-current={page === "discover" ? "page" : undefined} onClick={() => setPage("discover")}>
             <NavIcon name="discover" />Discover
           </button>
@@ -220,30 +276,49 @@ export default function App() {
         <button className="primary new-post" onClick={startComposer}>
           <NavIcon name="plus" /> New post
         </button>
-        {me ? <SidebarProfile me={me} onOpen={() => openProfile("me")} requestCount={requests.items.length} hasMore={requests.hasMore} /> : <p className="rail-footnote">Not signed in</p>}
+        {me ? <SidebarProfile me={me} onOpen={() => openProfile("me")} requestCount={requests.items.length} hasMore={requests.hasMore} /> : <p className="rail-footnote">{session ? "Signed in" : "Not signed in"}</p>}
       </aside>
       <div className="workspace">
         <header className="topbar">
           <span>
-            {page === "discover" ? "Discover" : page === "library" ? "My Library" : page === "account" ? "Account" : page === "feed" ? "Feed" : "Profile"}
+            {page === "featured" ? "Odin Stream" : page === "search" ? "Search" : page === "discover" ? "Discover" : page === "library" ? "My Library" : page === "account" ? "Account" : page === "feed" ? "Feed" : "Profile"}
           </span>
           <div>
-            <span className="country">United States</span>
+            <button className="header-search secondary" aria-current={page === "search" ? "page" : undefined}
+              onClick={() => {
+                if (page === "search") document.getElementById("catalog-query")?.focus();
+                else setPage("search");
+              }}><NavIcon name="search" /> Search</button>
+            {page === "feed" && <button className="primary desktop-feed-compose" onClick={startComposer}>+ New post</button>}
             {token && <button className="mobile-account-shortcut" aria-label="Open account settings" onClick={() => setPage("account")}><NavIcon name="account" /></button>}
             <button className="account-shortcut" aria-label={token ? "View your profile" : "Sign in"} onClick={() => token ? openProfile("me") : setPage("account")}>
-              {me ? <span className={`avatar ${avatarColor(me.id)}`}>{initials(me.display_name)}</span> : "Sign in"}
+              {me ? <span className={`avatar ${avatarColor(me.id)}`}>{initials(me.display_name)}</span> : session ? "My Profile" : "Sign in"}
               <RequestBadge count={requests.items.length} hasMore={requests.hasMore} />
             </button>
           </div>
         </header>
         <main id="main" tabIndex={-1}>
-          {page === "discover" ? (
-            <Discover token={token} onOpenTitle={openTitle} />
+          <div hidden={page !== "search"}>
+            <CatalogSearch active={page === "search"} token={token} onOpenTitle={openTitle} onOpenPerson={(actor, role) => setPerson({ actor, role })} />
+          </div>
+          {page === "featured" ? (
+            <Featured onOpenTitle={openTitle} onReady={setFeaturedReady} />
+          ) : page === "search" ? null : page === "discover" ? (
+            <>
+              <Discover key={viewerId || "guest"} token={token} preferencesCache={preferencesCache}
+                onOpenTitle={openTitle} onOpenAccount={() => setPage("account")} onOpenFeatured={() => setPage("featured")}
+                version={favoriteVersion} />
+              {token && <details className="discover-favorites">
+                <summary>Favorite people</summary>
+                <FavoritePeople key={viewerId} token={token} version={favoriteVersion} onChange={refreshFavorites} onOpenTitle={openTitle} />
+              </details>}
+            </>
           ) : page === "library" ? (
-            <Library key={viewerId || "signed-out"} token={token} onOpenTitle={openTitle} />
+            <Library key={viewerId || "signed-out"} token={token} cache={libraryCache} version={libraryVersion} onOpenTitle={openTitle} />
           ) : page === "account" ? (
             <Account
               session={session}
+              preferencesCache={preferencesCache}
               recovery={recovery}
               callbackError={authError}
               onClearCallbackError={() => setAuthError(null)}
@@ -265,6 +340,7 @@ export default function App() {
                     </div>
                   </div>
                   <Feed
+                    cache={feedCache}
                     token={token}
                     viewerId={viewerId}
                     scope={feed}
@@ -306,6 +382,7 @@ export default function App() {
             )
           ) : token ? (
             <ProfileScreen
+              ownProfile={ownProfile}
               token={token}
               viewerId={viewerId}
               profileId={profileId}
@@ -324,17 +401,20 @@ export default function App() {
             <span>
               <strong>OdinStream</strong>
             </span>
-            <span>Movie and TV data from TMDB. Availability provided by JustWatch.</span>
+            <span>Movie and TV data from <a href="https://www.themoviedb.org/" target="_blank" rel="noreferrer">TMDB</a>.
+              Availability provided by <a href="https://www.justwatch.com/" target="_blank" rel="noreferrer">JustWatch</a>.
+              This product uses the TMDB API and has no TMDB endorsement or certification.</span>
           </footer>
         </main>
       </div>
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {([ ["discover", "Discover"], ["library", "Library"], ["feed", "Feed"], ["profile", "Profile"] ] as const).map(([target, label]) => (
+        {([ ["featured", "Featured"], ["discover", "Discover"], ["library", "Library"], ["feed", "Feed"], ["profile", "Profile"] ] as const).map(([target, label]) => (
           <button key={target} aria-current={(target === "profile" ? viewingOwnProfile : page === target) ? "page" : undefined} onClick={() => target === "profile" ? (token ? openProfile("me") : setPage("account")) : setPage(target)}><NavIcon name={target} />{target === "profile" && <RequestBadge count={requests.items.length} hasMore={requests.hasMore} />}<span>{label}</span></button>
         ))}
-        <button onClick={startComposer}><NavIcon name="plus" /><span>New post</span></button>
       </nav>
-      {focus && <TitleDetails key={`${focus.media_type}:${focus.id}`} selection={focus} token={token} viewerId={viewerId} reloadKey={reloadKey} onClose={() => setFocus(null)} onReview={title => { setReviewTitle(title); setComposer("new"); }} onOpenProfile={openProfile} onEdit={setComposer} onOpenTitle={openTitle} />}
+      {page === "search" && person && <ActorCredits key={person.actor.id} actor={person.actor} role={person.role} token={token}
+        onClose={() => setPerson(null)} onOpenTitle={openTitle} onFavoriteChange={refreshFavorites} />}
+      {focus && <TitleDetails key={`${focus.media_type}:${focus.id}`} selection={focus} token={token} viewerId={viewerId} reloadKey={reloadKey} onClose={() => setFocus(null)} onReview={title => { setReviewTitle(title); setComposer("new"); }} onOpenProfile={openProfile} onEdit={setComposer} onOpenTitle={openTitle} onFavoriteChange={refreshFavorites} onSaved={() => { libraryCache.invalidate(); setLibraryVersion(value => value + 1); }} />}
       {composer && token && (
         <PostComposer
           token={token}

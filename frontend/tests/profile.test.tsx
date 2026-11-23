@@ -77,7 +77,43 @@ it("shows a private profile identity without requesting protected posts or displ
   expect(screen.getByRole("button", { name: "Request to follow" })).toBeTruthy();
   expect(screen.queryByText("Hidden bio")).toBeNull();
   expect(screen.queryByLabelText("Profile statistics")).toBeNull();
+  expect(screen.queryByRole("button", { name: /followers|following/i })).toBeNull();
   expect(fetchMock.mock.calls.some(([url]) => url.endsWith("/posts"))).toBe(false);
+});
+
+it.each([
+  { profileId: "me", direction: "followers", label: "Followers", visibility: "private" },
+  { profileId: "other", direction: "following", label: "Following", visibility: "public" },
+])("opens $direction on profile $profileId and navigates to a listed account", async ({
+  profileId, direction, label, visibility,
+}) => {
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url.endsWith(`/connections/${direction}?offset=0`)) {
+      return new Response(JSON.stringify({
+        items: [{ user_id: "maya", display_name: "Maya", handle: "maya.watches" }],
+        next_offset: 30,
+      }));
+    }
+    if (url.endsWith(`/connections/${direction}?offset=30`)) {
+      return new Response(JSON.stringify({
+        items: [{ user_id: "sam", display_name: "Sam", handle: "sam.watches" }],
+        next_offset: null,
+      }));
+    }
+    return new Response(JSON.stringify(url.endsWith("/posts") ? { items: [] }
+      : { ...profile, id: profileId, visibility, follower_count: 31, following_count: 31 }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  render(<Profile {...props} profileId={profileId} />);
+  const count = await screen.findByRole("button", { name: `31 ${label}` });
+  expect(fetchMock.mock.calls.some(([url]) => url.includes("/connections/"))).toBe(false);
+  fireEvent.click(count);
+  expect(screen.getByRole("dialog", { name: label })).toBeTruthy();
+  expect(await screen.findByRole("button", { name: /maya.watches/i })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+  fireEvent.click(await screen.findByRole("button", { name: /sam.watches/i }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(props.onOpenProfile).toHaveBeenCalledWith("sam");
 });
 
 it("shows private profile posts to approved followers", async () => {

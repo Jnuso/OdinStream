@@ -3,7 +3,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { clearCatalogCache } from "../src/data/catalogCache";
+import CatalogSearch from "../src/components/CatalogSearch";
 import Discover from "../src/components/Discover";
+import TitleDetails from "../src/components/TitleDetails";
+import { useState } from "react";
 import Library from "../src/components/Library";
 import FollowRequests from "../src/components/FollowRequests";
 import { useFollowRequests } from "../src/data/useFollowRequests";
@@ -26,7 +29,15 @@ it("ignores completed saves belonging to a previously opened title", async () =>
     if (path.endsWith("/saved-titles") || path.endsWith("/posts")) return json({ items: [], next_offset: null });
     return json(title(Number(path.split("/").at(-1))));
   }));
-  render(<Discover token="token" focus={null} onFocusHandled={() => {}} />);
+  function Browse() {
+    const [id, setId] = useState<number | null>(null);
+    return <>
+      <Discover token="token" onOpenTitle={(_, value) => setId(value)} />
+      {id && <TitleDetails key={id} selection={{ media_type: "movie", id }} token="token" onClose={() => setId(null)}
+        onOpenTitle={(_, value) => setId(value)} onOpenProfile={vi.fn()} />}
+    </>;
+  }
+  render(<Browse />);
   fireEvent.click(await screen.findByRole("button", { name: /^Title 1/ }));
   fireEvent.click(await screen.findByRole("button", { name: "Add to watchlist" }));
   fireEvent.click(screen.getByRole("button", { name: "Close Title 1 details" }));
@@ -49,17 +60,17 @@ it("keeps search cleared after an earlier request finishes", async () => {
     if (url.searchParams.get("query") === "second") return pending;
     return json({ items: [title(1)], page: 1, total_pages: 1 });
   }));
-  render(<Discover token="token" focus={null} onFocusHandled={() => {}} />);
-  fireEvent.change(screen.getByLabelText("Search titles"), { target: { value: "first" } });
+  render(<CatalogSearch token="token" onOpenTitle={vi.fn()} onOpenPerson={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText("Search catalog"), { target: { value: "first" } });
   fireEvent.click(screen.getByRole("button", { name: "Search", exact: true }));
   await screen.findByRole("heading", { name: "Results for “first”" });
-  fireEvent.change(screen.getByLabelText("Search titles"), { target: { value: "second" } });
+  fireEvent.change(screen.getByLabelText("Search catalog"), { target: { value: "second" } });
   fireEvent.click(screen.getByRole("button", { name: "Search", exact: true }));
   fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
   expect(screen.queryByRole("heading", { name: /Results for/ })).toBeNull();
   await act(async () => finish(json({ items: [title(2)], page: 1, total_pages: 1 })));
   expect(screen.queryByRole("heading", { name: "Results for “second”" })).toBeNull();
-  expect((screen.getByLabelText("Search titles") as HTMLInputElement).value).toBe("");
+  expect((screen.getByLabelText("Search catalog") as HTMLInputElement).value).toBe("");
 });
 
 function RequestHarness() {

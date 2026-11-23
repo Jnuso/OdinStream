@@ -1,0 +1,50 @@
+name: Database migrations (develop)
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'supabase/**'
+      - '.github/workflows/database-migrations-develop.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test migrations and database policies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: supabase/setup-cli@v3
+        with:
+          version: 2.95.3
+      - name: Start local database and apply migrations
+        run: supabase db start
+      - name: Run database tests
+        run: supabase test db
+
+  deploy-develop:
+    name: Apply migrations to develop Supabase
+    if: github.ref == 'refs/heads/develop'
+    needs: test
+    runs-on: ubuntu-latest
+    environment: develop-branch
+    concurrency:
+      group: supabase-develop-branch-migrations
+      cancel-in-progress: false
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: supabase/setup-cli@v3
+        with:
+          version: 2.95.3
+      - name: Verify deployment configuration
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo 'Set SUPABASE_DB_URL in the develop-branch GitHub environment.' >&2
+            exit 1
+          fi
+      - name: Apply pending migrations
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --yes

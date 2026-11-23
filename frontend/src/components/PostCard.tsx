@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { avatarColor, formatYear, initials, type Post } from "../data/social";
+import { cachedCatalog } from "../data/catalogCache";
 import Poster from "./Poster";
 
 export default function PostCard({
@@ -19,6 +21,21 @@ export default function PostCard({
   showProfileLink?: boolean;
 }) {
   const year = formatYear(post.release_date);
+  const catalogPath = `/api/catalog/${post.media_type}/${post.tmdb_id}`;
+  const [catalogPoster, setCatalogPoster] = useState<{ path: string; posterPath: string } | null>(null);
+  const posterPath = post.poster_path || (catalogPoster?.path === catalogPath ? catalogPoster.posterPath : null);
+
+  useEffect(() => {
+    if (post.poster_path) return;
+    let active = true;
+    cachedCatalog<{ poster_path: string | null }>(catalogPath)
+      .then(title => {
+        if (active && title.poster_path) setCatalogPoster({ path: catalogPath, posterPath: title.poster_path });
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [catalogPath, post.poster_path]);
+
   return (
     <article className="post-card" aria-label={`${post.author.display_name} on ${post.title_name}`}>
       <div className="post-author">
@@ -39,7 +56,7 @@ export default function PostCard({
           aria-label={`Open ${post.title_name} details`}
           onClick={() => onOpenTitle(post.media_type, post.tmdb_id)}
         >
-          <Poster name={post.title_name} posterPath={post.poster_path} size="w185" />
+          <Poster name={post.title_name} posterPath={posterPath} size="w185" />
         </button>
         <div className="post-review">
           <span className="eyebrow">
