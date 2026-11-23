@@ -168,6 +168,19 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual([(item["name"], item["characters"]) for item in response.json()["items"]],
                          [("Show", []), ("Movie", ["Lead", "Double"])])
 
+    def test_actor_profile_returns_biography_and_optional_facts(self):
+        with patch("app.catalog.tmdb_get", return_value={
+            "id": 7, "name": "Actor", "biography": "A biography.", "birthday": "1973-04-03",
+            "place_of_birth": "Santa Cruz", "profile_path": "/portrait.jpg",
+        }) as fetch:
+            response = self.client.get("/api/catalog/people/7")
+        fetch.assert_called_once_with("/person/7")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {
+            "id": 7, "name": "Actor", "biography": "A biography.", "birthday": "1973-04-03",
+            "deathday": None, "place_of_birth": "Santa Cruz", "profile_path": "/portrait.jpg",
+        })
+
 
 if __name__ == "__main__":
     unittest.main()

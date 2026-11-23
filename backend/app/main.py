@@ -19,6 +19,7 @@ from app.catalog import (
 )
 from app.db import close_pools, get_pool
 from app.errors import APIError
+from app.favorite_people import router as favorite_people_router
 from app.library import router as library_router
 from app.recommendations import router as recommendations_router
 from app.security_middleware import (
@@ -69,6 +70,7 @@ app.include_router(account_deletion_router)
 app.include_router(catalog_router)
 app.include_router(filtered_catalog_router)
 app.include_router(library_router)
+app.include_router(favorite_people_router)
 app.include_router(social_router)
 app.include_router(recommendations_router)
 

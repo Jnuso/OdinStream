@@ -183,6 +183,17 @@ def search_available(query: str = Query(min_length=1, max_length=200), page: int
             "availability_region": "US", "filtered_by_services": True}
 
 
+@router.get("/people/{person_id}")
+def person_details(person_id: int) -> dict:
+    if not 0 < person_id <= 2147483647:
+        raise APIError(422, "invalid_person", "Invalid TMDB person ID.")
+    data = tmdb_get(f"/person/{person_id}")
+    if data.get("id") != person_id or not data.get("name") or data.get("adult"):
+        raise APIError(404, "person_not_found", "This person could not be found.")
+    return {field: data.get(field) for field in
+            ("id", "name", "profile_path", "biography", "birthday", "deathday", "place_of_birth")}
+
+
 @router.get("/people/{person_id}/credits")
 def person_credits(person_id: int) -> dict:
     if person_id <= 0:
@@ -197,7 +208,7 @@ def person_credits(person_id: int) -> dict:
         if not title["name"]:
             continue
         key = (media_type, title["id"])
-        entry = titles.setdefault(key, {**title, "characters": []})
+        entry = titles.setdefault(key, {**title, "characters": [], "popularity": credit.get("popularity") or 0})
         character = credit.get("character")
         if character and character not in entry["characters"]:
             entry["characters"].append(character)

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Session } from "@supabase/supabase-js";
 import App from "../src/App";
 import TitleDetails from "../src/components/TitleDetails";
+import ActorCredits from "../src/components/ActorCredits";
 import { clearCatalogCache } from "../src/data/catalogCache";
 
 const auth = vi.hoisted(() => ({ changed: null as ((event: string, session: Session | null) => void) | null }));
@@ -39,6 +40,35 @@ it("opens an actor's other credits and navigates to a credited title", async () 
   fireEvent.click(await screen.findByRole("button", { name: /A movie.*2022.*Alex/ }));
   expect(openTitle).toHaveBeenCalledWith("movie", title.id);
   expect(screen.queryByRole("dialog", { name: "Adam Scott acting credits" })).toBeNull();
+});
+
+it("loads an actor profile and persists the favorite toggle across panel visits", async () => {
+  const actor = { id: 7, name: "Adam Scott" };
+  let favorited = false;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+    const path = new URL(String(input), "http://localhost").pathname;
+    if (path === "/api/me/favorite-people/7") {
+      if (options?.method === "PUT") favorited = true;
+      if (options?.method === "DELETE") {
+        favorited = false;
+        return new Response(null, { status: 204 });
+      }
+      return Response.json({ favorited });
+    }
+    if (path.endsWith("/credits")) return Response.json({ items: [] });
+    return Response.json({ ...actor, biography: "An actor and producer.", place_of_birth: "Santa Cruz" });
+  }));
+  const panel = <ActorCredits actor={actor} token="token" onClose={vi.fn()} onOpenTitle={vi.fn()} />;
+  const first = render(panel);
+  await screen.findByText("An actor and producer.");
+  await waitFor(() => expect((screen.getByRole("button", { name: "Favorite" }) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole("button", { name: "Favorite" }));
+  await screen.findByRole("button", { name: "Favorited", pressed: true });
+  first.unmount();
+  render(panel);
+  fireEvent.click(await screen.findByRole("button", { name: "Favorited", pressed: true }));
+  await screen.findByRole("button", { name: "Favorite", pressed: false });
+  expect(favorited).toBe(false);
 });
 
 it("waits for Discover and lets Feed join its in-flight preload", async () => {

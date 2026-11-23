@@ -22,6 +22,7 @@ import { api } from "./data/api";
 import Discover from "./components/Discover";
 import Feed from "./components/Feed";
 import Library from "./components/Library";
+import FavoritePeople from "./components/FavoritePeople";
 import PostComposer from "./components/PostComposer";
 import ProfileScreen from "./components/Profile";
 import TitleDetails from "./components/TitleDetails";
@@ -76,6 +77,8 @@ export default function App() {
     posts: createPageCache(() => fetchProfilePosts(token!, viewerId)),
   }), [token, viewerId, reloadKey]);
   const [libraryVersion, setLibraryVersion] = useState(0);
+  const [favoriteVersion, setFavoriteVersion] = useState(0);
+  const refreshFavorites = () => setFavoriteVersion(value => value + 1);
   const [discoverReadyToken, setDiscoverReadyToken] = useState<string | null>(null);
   const canPreload = !!token && setup?.id === viewerId && setup.status === "ready" && !recovery;
   const viewingOwnProfile = page === "profile" && (profileId === "me" || profileId === viewerId);
@@ -275,7 +278,10 @@ export default function App() {
           {page === "discover" ? (
             <Discover token={token} preferencesCache={preferencesCache} onOpenTitle={openTitle} onOpenAccount={() => setPage("account")} onReady={setDiscoverReadyToken} />
           ) : page === "library" ? (
-            <Library key={viewerId || "signed-out"} token={token} cache={libraryCache} version={libraryVersion} onOpenTitle={openTitle} />
+            <>
+              <Library key={viewerId || "signed-out"} token={token} cache={libraryCache} version={libraryVersion} onOpenTitle={openTitle} />
+              {token && <FavoritePeople key={viewerId} token={token} version={favoriteVersion} onChange={refreshFavorites} onOpenTitle={openTitle} />}
+            </>
           ) : page === "account" ? (
             <Account
               session={session}
@@ -372,7 +378,7 @@ export default function App() {
         ))}
         <button onClick={startComposer}><NavIcon name="plus" /><span>New post</span></button>
       </nav>
-      {focus && <TitleDetails key={`${focus.media_type}:${focus.id}`} selection={focus} token={token} viewerId={viewerId} reloadKey={reloadKey} onClose={() => setFocus(null)} onReview={title => { setReviewTitle(title); setComposer("new"); }} onOpenProfile={openProfile} onEdit={setComposer} onOpenTitle={openTitle} onSaved={() => { libraryCache.invalidate(); setLibraryVersion(value => value + 1); }} />}
+      {focus && <TitleDetails key={`${focus.media_type}:${focus.id}`} selection={focus} token={token} viewerId={viewerId} reloadKey={reloadKey} onClose={() => setFocus(null)} onReview={title => { setReviewTitle(title); setComposer("new"); }} onOpenProfile={openProfile} onEdit={setComposer} onOpenTitle={openTitle} onFavoriteChange={refreshFavorites} onSaved={() => { libraryCache.invalidate(); setLibraryVersion(value => value + 1); }} />}
       {composer && token && (
         <PostComposer
           token={token}

@@ -93,8 +93,53 @@
   overflow-wrap: anywhere;
 }
 .title-cast-card:hover, .title-cast-card:focus-visible { background: var(--surface); }
-.actor-credits h3 { margin: 12px 0 16px; }
-.actor-credits .poster-w185 { width: 100%; aspect-ratio: 2 / 3; height: auto; }
+.actor-back { margin-bottom: 20px; }
+.actor-profile { display: grid; grid-template-columns: minmax(0, 27%) minmax(0, 1fr); align-items: start; gap: clamp(16px, 3vw, 36px); }
+.actor-profile > .title-cast-photo { border-radius: 12px; }
+.actor-heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; }
+.actor-heading h2 { margin: 0; font-size: clamp(25px, 4vw, 44px); line-height: 1.12; }
+.actor-credits .actor-favorite { border-radius: 999px; border: 1px solid #a9c77b; white-space: nowrap; }
+.actor-favorite span { font-size: 1.25em; }
+.actor-credits .actor-favorite.is-favorite, .actor-filters button[aria-pressed="true"] { color: #13200e; background: #b3cf88; }
+.actor-overview p { margin: 8px 0; }
+.actor-role em, .actor-read-more { color: #b3cf88; }
+.actor-bio { line-height: 1.55; white-space: pre-line; }
+.actor-read-more { margin-left: 8px; padding: 2px 4px; background: transparent; border: 0; text-decoration: underline; }
+.actor-featured { border-top: 1px solid #ffffff26; margin-top: 16px; }
+.actor-featured h3, .actor-filmography-title { margin: 14px 0 10px; }
+.actor-featured .title-cast-list { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.actor-featured .poster-w185 { width: 100%; aspect-ratio: 2 / 3; height: auto; }
+.actor-filmography-title { border-top: 1px solid #ffffff26; padding-top: 16px; }
+.actor-filters { display: flex; gap: 8px; margin-bottom: 12px; }
+.actor-filters button { border-radius: 999px; }
+.actor-filmography { list-style: none; padding: 0; }
+.actor-credit-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-bottom: 1px solid #ffffff26;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.actor-credit-row:hover, .actor-credit-row:focus-visible { background: var(--surface); }
+.actor-credit-row .poster-w185 { width: 42px; height: 60px; }
+.favorite-people { margin: 32px 0 20px; }
+.favorite-people .title-cast-list { grid-template-columns: repeat(auto-fill, minmax(100px, 132px)); }
+
+@media (max-width: 600px) {
+  .actor-profile { grid-template-columns: 1fr; gap: 12px; }
+  .actor-profile > .title-cast-photo { width: clamp(82px, 27vw, 120px); }
+  .actor-featured .title-cast-list { grid-template-columns: repeat(4, minmax(85px, 30%)); overflow-x: auto; }
+  .actor-credit-row { grid-template-columns: 42px 1fr; gap: 3px 10px; }
+  .actor-credit-row .poster-w185 { grid-row: 1 / span 3; }
+  .actor-credit-row > span { grid-column: 2; font-size: 12px; }
+}
 .title-cast-photo {
   position: relative;
   display: grid;

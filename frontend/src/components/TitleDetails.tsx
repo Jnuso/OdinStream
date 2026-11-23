@@ -28,12 +28,13 @@ type Episode = { episode_number: number; name: string; overview: string; air_dat
 type SavedTitle = { media_type: MediaType; tmdb_id: number; status: string };
 type LibraryCheck = { token: string; mediaType: MediaType; id: number; status: string | null; error?: string };
 
-export default function TitleDetails({ selection, token, viewerId, reloadKey = 0, onClose, onReview, onOpenProfile, onEdit, onOpenTitle, onSaved }: {
+export default function TitleDetails({ selection, token, viewerId, reloadKey = 0, onClose, onReview, onOpenProfile, onEdit, onOpenTitle, onSaved, onFavoriteChange }: {
   selection: { media_type: MediaType; id: number }; token: string | null; viewerId?: string; reloadKey?: number;
   onClose: () => void; onReview?: (title: TitleSummary) => void;
   onOpenProfile?: (id: string) => void; onEdit?: (post: Post) => void;
   onOpenTitle: (type: MediaType, id: number) => void;
   onSaved?: () => void;
+  onFavoriteChange?: () => void;
 }) {
   const [detail, setDetail] = useState<Details | null>(null);
   const [detailError, setDetailError] = useState("");
@@ -47,7 +48,7 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
   const [libraryCheck, setLibraryCheck] = useState<LibraryCheck | null>(null);
   const [libraryRetry, setLibraryRetry] = useState(0);
   const [visibleCastCount, setVisibleCastCount] = useState(CAST_PAGE_SIZE);
-  const [selectedActor, setSelectedActor] = useState<{ id: number; name: string } | null>(null);
+  const [selectedActor, setSelectedActor] = useState<NonNullable<Details["cast"]>[number] | null>(null);
   const cast = detail?.cast ?? [];
   const detailRequest = useRef(0);
   const seasonRequest = useRef(0);
@@ -260,7 +261,8 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
       </>}
   </Modal>
     {selectedActor && (
-      <ActorCredits key={selectedActor.id} actor={selectedActor} currentTitle={selection}
+      <ActorCredits key={selectedActor.id} actor={selectedActor} currentTitle={{ ...selection, name: detail?.name }}
+        token={token} onFavoriteChange={onFavoriteChange}
         onClose={() => setSelectedActor(null)} onOpenTitle={onOpenTitle} />
     )}
   </>;
