@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { authCallbackError, supabase } from "./data/auth";
 import { useNavigation, type Page } from "./data/navigation";
@@ -30,6 +30,7 @@ import "./DesktopPrototype.css";
 import "./RetroVideoStore.css";
 import FollowRequests, { RequestBadge } from "./components/FollowRequests";
 import { useFollowRequests } from "./data/useFollowRequests";
+import { createLibraryCache } from "./data/libraryCache";
 
 type Focus = { media_type: MediaType; id: number };
 
@@ -63,7 +64,20 @@ export default function App() {
   const { page, feed, profileId, navigate } = useNavigation();
   const token = session?.access_token ?? null;
   const viewerId = session?.user.id ?? "";
+  const libraryCache = useMemo(() => createLibraryCache(token), [token]);
+  const [libraryVersion, setLibraryVersion] = useState(0);
+  const canPreloadLibrary = !!token && setup?.id === viewerId && setup.status === "ready" && !recovery;
   const viewingOwnProfile = page === "profile" && (profileId === "me" || profileId === viewerId);
+
+  useEffect(() => {
+    if (!canPreloadLibrary || page !== "discover") return;
+    const timer = window.setTimeout(() => { void libraryCache.load().catch(() => {}); }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [canPreloadLibrary, libraryCache, page]);
+
+  function preloadLibrary() {
+    if (canPreloadLibrary && page !== "library") void libraryCache.load().catch(() => {});
+  }
 
   useEffect(() => {
     if (!supabase) return;
@@ -203,7 +217,7 @@ export default function App() {
           <button className={`nav-item ${page === "discover" ? "active" : ""}`} aria-current={page === "discover" ? "page" : undefined} onClick={() => setPage("discover")}>
             <NavIcon name="discover" />Discover
           </button>
-          <button className={`nav-item ${page === "library" ? "active" : ""}`} aria-current={page === "library" ? "page" : undefined} onClick={() => setPage("library")}>
+          <button className={`nav-item ${page === "library" ? "active" : ""}`} aria-current={page === "library" ? "page" : undefined} onPointerEnter={event => { if (event.pointerType === "mouse") preloadLibrary(); }} onFocus={preloadLibrary} onClick={() => setPage("library")}>
             <NavIcon name="library" />My Library
           </button>
           <button className={`nav-item ${page === "feed" ? "active" : ""}`} aria-current={page === "feed" ? "page" : undefined} onClick={() => setPage("feed")}>
@@ -244,7 +258,7 @@ export default function App() {
           {page === "discover" ? (
             <Discover token={token} onOpenTitle={openTitle} onOpenAccount={() => setPage("account")} />
           ) : page === "library" ? (
-            <Library key={viewerId || "signed-out"} token={token} onOpenTitle={openTitle} />
+            <Library key={viewerId || "signed-out"} token={token} cache={libraryCache} version={libraryVersion} onOpenTitle={openTitle} />
           ) : page === "account" ? (
             <Account
               session={session}
@@ -338,7 +352,7 @@ export default function App() {
         ))}
         <button onClick={startComposer}><NavIcon name="plus" /><span>New post</span></button>
       </nav>
-      {focus && <TitleDetails key={`${focus.media_type}:${focus.id}`} selection={focus} token={token} viewerId={viewerId} reloadKey={reloadKey} onClose={() => setFocus(null)} onReview={title => { setReviewTitle(title); setComposer("new"); }} onOpenProfile={openProfile} onEdit={setComposer} onOpenTitle={openTitle} />}
+      {focus && <TitleDetails key={`${focus.media_type}:${focus.id}`} selection={focus} token={token} viewerId={viewerId} reloadKey={reloadKey} onClose={() => setFocus(null)} onReview={title => { setReviewTitle(title); setComposer("new"); }} onOpenProfile={openProfile} onEdit={setComposer} onOpenTitle={openTitle} onSaved={() => { libraryCache.invalidate(); setLibraryVersion(value => value + 1); }} />}
       {composer && token && (
         <PostComposer
           token={token}

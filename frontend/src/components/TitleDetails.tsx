@@ -24,11 +24,12 @@ type Episode = { episode_number: number; name: string; overview: string; air_dat
 type SavedTitle = { media_type: MediaType; tmdb_id: number; status: string };
 type LibraryCheck = { token: string; mediaType: MediaType; id: number; status: string | null; error?: string };
 
-export default function TitleDetails({ selection, token, viewerId, reloadKey = 0, onClose, onReview, onOpenProfile, onEdit, onOpenTitle }: {
+export default function TitleDetails({ selection, token, viewerId, reloadKey = 0, onClose, onReview, onOpenProfile, onEdit, onOpenTitle, onSaved }: {
   selection: { media_type: MediaType; id: number }; token: string | null; viewerId?: string; reloadKey?: number;
   onClose: () => void; onReview?: (title: TitleSummary) => void;
   onOpenProfile?: (id: string) => void; onEdit?: (post: Post) => void;
   onOpenTitle: (type: MediaType, id: number) => void;
+  onSaved?: () => void;
 }) {
   const [detail, setDetail] = useState<Details | null>(null);
   const [detailError, setDetailError] = useState("");
@@ -76,6 +77,7 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
         method: "POST",
         body: JSON.stringify({ media_type: detail.media_type, tmdb_id: detail.id, status: "watchlist" }),
       });
+      onSaved?.();
       if (request !== detailRequest.current) return;
       setSaveMessage("Added to your watchlist.");
       setLibraryCheck({ token, mediaType: detail.media_type, id: detail.id, status: "watchlist" });
