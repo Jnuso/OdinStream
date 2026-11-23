@@ -4,7 +4,12 @@ import { createPageCache } from "./pageCache";
 export type Preferences = { favorite_genres: string[]; streaming_services: string[] };
 
 export const preferenceOptions = {
-  favorite_genres: ["Action", "Animation", "Comedy", "Documentary", "Drama", "Fantasy", "Horror", "Romance", "Science Fiction", "Thriller"],
+  favorite_genres: [
+    "Action", "Action & Adventure", "Adventure", "Animation", "Comedy", "Crime", "Documentary",
+    "Drama", "Family", "Fantasy", "History", "Horror", "Kids", "Music", "Mystery", "News", "Reality",
+    "Romance", "Sci-Fi & Fantasy", "Science Fiction", "Soap", "Talk", "Thriller", "TV Movie", "War",
+    "War & Politics", "Western",
+  ],
   streaming_services: ["Netflix", "Max", "Apple TV+", "Hulu", "Disney+"],
 };
 

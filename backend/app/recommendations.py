@@ -26,12 +26,18 @@ MAX_INFERRED_PAGES = 3
 
 GENRE_IDS: dict[str, dict[str, int]] = {
     "movie": {
-        "Action": 28, "Animation": 16, "Comedy": 35, "Documentary": 99, "Drama": 18,
-        "Fantasy": 14, "Horror": 27, "Romance": 10749, "Science Fiction": 878, "Thriller": 53,
+        "Action": 28, "Adventure": 12, "Animation": 16, "Comedy": 35, "Crime": 80,
+        "Documentary": 99, "Drama": 18, "Family": 10751, "Fantasy": 14, "History": 36,
+        "Horror": 27, "Music": 10402, "Mystery": 9648, "Romance": 10749,
+        "Science Fiction": 878, "Thriller": 53, "TV Movie": 10770, "War": 10752, "Western": 37,
     },
     "tv": {
-        "Action": 10759, "Animation": 16, "Comedy": 35, "Documentary": 99, "Drama": 18,
-        "Fantasy": 10765, "Science Fiction": 10765,
+        "Action & Adventure": 10759, "Animation": 16, "Comedy": 35, "Crime": 80,
+        "Documentary": 99, "Drama": 18, "Family": 10751, "Kids": 10762, "Mystery": 9648,
+        "News": 10763, "Reality": 10764, "Sci-Fi & Fantasy": 10765, "Soap": 10766,
+        "Talk": 10767, "War & Politics": 10768, "Western": 37,
+        # Keep the existing TV matches for previously supported broad selections.
+        "Action": 10759, "Fantasy": 10765, "Science Fiction": 10765,
     },
 }
 EXCLUDED_STATUSES = {"movie": {"watched"}, "tv": {"completed", "dropped"}}

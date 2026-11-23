@@ -20,7 +20,7 @@ select throws_ok($$insert into public.user_preferences (user_id, favorite_genres
 select throws_ok($$insert into public.user_preferences (user_id, streaming_services)
   values ('11111111-1111-4111-8111-111111111111', array[null]::text[])$$, '23514', null, 'null service rejected');
 select lives_ok($$insert into public.user_preferences (user_id, favorite_genres, streaming_services)
-  values ('11111111-1111-4111-8111-111111111111', array['Drama', 'Science Fiction'], array['Netflix'])$$, 'owner can save preferences');
+  values ('11111111-1111-4111-8111-111111111111', array['Drama', 'Science Fiction', 'TV Movie', 'Sci-Fi & Fantasy'], array['Netflix'])$$, 'owner can save preferences including newly supported genres');
 select throws_ok($$insert into public.user_preferences (user_id, favorite_genres)
   values ('22222222-2222-4222-8222-222222222222', array['Drama'])$$, '42501', null, 'cannot insert another user preferences');
 select lives_ok($$update public.user_preferences set streaming_services = array['Max', 'Hulu', 'Peacock Premium']
