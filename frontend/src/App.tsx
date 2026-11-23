@@ -34,6 +34,7 @@ import FollowRequests, { RequestBadge } from "./components/FollowRequests";
 import { useFollowRequests } from "./data/useFollowRequests";
 import { createLibraryCache } from "./data/libraryCache";
 import { createPageCache } from "./data/pageCache";
+import { createPreferencesCache } from "./data/preferencesCache";
 
 type Focus = { media_type: MediaType; id: number };
 
@@ -68,6 +69,7 @@ export default function App() {
   const token = session?.access_token ?? null;
   const viewerId = session?.user.id ?? "";
   const libraryCache = useMemo(() => createLibraryCache(token), [token]);
+  const preferencesCache = useMemo(() => token ? createPreferencesCache(token) : undefined, [token]);
   const feedCache = useMemo(() => createPageCache(() => fetchFeed(token!, feed)), [token, feed, reloadKey]);
   const ownProfile = useMemo(() => ({
     summary: createPageCache(() => fetchMyProfile(token!)),
@@ -83,16 +85,16 @@ export default function App() {
       setDiscoverReadyToken(null);
       return;
     }
-    if (!canPreload || discoverReadyToken !== token) return;
+    if (!canPreload || discoverReadyToken !== token || !preferencesCache) return;
     let active = true;
     void (async () => {
-      for (const cache of [libraryCache, feedCache, ownProfile.posts]) {
+      for (const cache of [libraryCache, feedCache, ownProfile.posts, preferencesCache]) {
         if (!active) break;
         await cache.load().catch(() => {});
       }
     })();
     return () => { active = false; };
-  }, [canPreload, discoverReadyToken, feedCache, libraryCache, ownProfile, page, token]);
+  }, [canPreload, discoverReadyToken, feedCache, libraryCache, ownProfile, preferencesCache, page, token]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -271,12 +273,13 @@ export default function App() {
         </header>
         <main id="main" tabIndex={-1}>
           {page === "discover" ? (
-            <Discover token={token} onOpenTitle={openTitle} onOpenAccount={() => setPage("account")} onReady={setDiscoverReadyToken} />
+            <Discover token={token} preferencesCache={preferencesCache} onOpenTitle={openTitle} onOpenAccount={() => setPage("account")} onReady={setDiscoverReadyToken} />
           ) : page === "library" ? (
             <Library key={viewerId || "signed-out"} token={token} cache={libraryCache} version={libraryVersion} onOpenTitle={openTitle} />
           ) : page === "account" ? (
             <Account
               session={session}
+              preferencesCache={preferencesCache}
               recovery={recovery}
               callbackError={authError}
               onClearCallbackError={() => setAuthError(null)}

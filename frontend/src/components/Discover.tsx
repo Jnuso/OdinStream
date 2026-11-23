@@ -5,6 +5,7 @@ import { cachedCatalog } from "../data/catalogCache";
 import { fetchRecommendations, formatYear, type MediaType, type Recommendation, type TitleSummary, type Post } from "../data/social";
 import Skeleton from "./Skeleton";
 import TitleDetails from "./TitleDetails";
+import type { createPreferencesCache, Preferences } from "../data/preferencesCache";
 
 type Title = {
   id: number;
@@ -28,6 +29,7 @@ export default function Discover({
   onOpenTitle,
   onOpenAccount,
   onReady,
+  preferencesCache,
 }: {
   token: string | null;
   focus?: { media_type: MediaType; id: number } | null;
@@ -40,6 +42,7 @@ export default function Discover({
   onOpenTitle?: (type: MediaType, id: number) => void;
   onOpenAccount?: () => void;
   onReady?: (token: string) => void;
+  preferencesCache?: ReturnType<typeof createPreferencesCache>;
 }) {
   const [query, setQuery] = useState("");
   const [serviceFilter, setServiceFilter] = useState(false);
@@ -138,7 +141,7 @@ export default function Discover({
   useEffect(() => {
     if (!token || !showServices) return;
     let active = true;
-    api<{ streaming_services: string[] }>("/api/me/preferences", token)
+    (preferencesCache?.load() ?? api<Preferences>("/api/me/preferences", token))
       .then(data => {
         if (active && Array.isArray(data.streaming_services)) {
           setServices({ token, names: data.streaming_services });
@@ -147,7 +150,7 @@ export default function Discover({
       .catch(() => {})
       .finally(() => { if (active) setPreferencesToken(token); });
     return () => { active = false; };
-  }, [token, showServices]);
+  }, [token, showServices, preferencesCache]);
 
   useEffect(() => {
     if (!showTrending) return;

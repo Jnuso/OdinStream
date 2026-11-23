@@ -3,26 +3,31 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../data/auth";
 import { api } from "../data/api";
 import Skeleton from "./Skeleton";
+import type { createPreferencesCache, Preferences } from "../data/preferencesCache";
 
-type Preferences = { favorite_genres: string[]; streaming_services: string[] };
 const preferenceOptions = {
   favorite_genres: ["Action", "Animation", "Comedy", "Documentary", "Drama", "Fantasy", "Horror", "Romance", "Science Fiction", "Thriller"],
   streaming_services: ["Netflix", "Max", "Apple TV+", "Hulu", "Disney+"],
 };
 
-function AccountPreferences({ token }: { token: string }) {
-  const [preferences, setPreferences] = useState<Preferences | null>(null);
+function AccountPreferences({ token, cache }: { token: string; cache?: ReturnType<typeof createPreferencesCache> }) {
+  const [preferences, setPreferences] = useState<Preferences | null>(() => cache?.peekFresh() ?? null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [reload, setReload] = useState(0);
   const tokenRef = useRef(token);
   tokenRef.current = token;
+  const cacheRef = useRef(cache);
+  cacheRef.current = cache;
 
   useEffect(() => {
     let active = true;
+    const currentCache = cacheRef.current;
+    const fresh = currentCache?.peekFresh();
+    if (fresh) { setPreferences(fresh); return; }
     setPreferences(null); setError(""); setMessage("");
-    api<Preferences>("/api/me/preferences", tokenRef.current)
+    (currentCache?.load() ?? api<Preferences>("/api/me/preferences", tokenRef.current))
       .then(data => { if (active) setPreferences(data); })
       .catch(err => { if (active) setError(err instanceof Error ? err.message : "Could not load preferences."); });
     return () => { active = false; };
@@ -43,6 +48,7 @@ function AccountPreferences({ token }: { token: string }) {
     setSaving(true); setError(""); setMessage("");
     try {
       const saved = await api<Preferences>("/api/me/preferences", tokenRef.current, { method: "PUT", body: JSON.stringify(preferences) });
+      cacheRef.current?.store(saved);
       setPreferences(saved); setMessage("Preferences saved.");
     } catch (err) { setError(err instanceof Error ? err.message : "Could not save preferences."); }
     finally { setSaving(false); }
@@ -128,9 +134,10 @@ function DeleteAccount({ token, onDeleted }: { token: string; onDeleted: () => v
   );
 }
 
-export default function Account({ session, recovery, callbackError, onClearCallbackError, onRecoveryComplete, onDeleted }: {
+export default function Account({ session, recovery, callbackError, onClearCallbackError, onRecoveryComplete, onDeleted, preferencesCache }: {
   session: Session | null; recovery: boolean; callbackError: string | null;
   onClearCallbackError: () => void; onRecoveryComplete: () => void; onDeleted: () => void;
+  preferencesCache?: ReturnType<typeof createPreferencesCache>;
 }) {
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
@@ -181,7 +188,7 @@ export default function Account({ session, recovery, callbackError, onClearCallb
   if (session && mode !== "recovery") return <section className="account-page"><div className="page-heading"><div><h1>Account</h1><p>Your preferences and sign-in details, all in one place.</p></div></div>{callbackError && <p className="form-error" role="alert">{callbackError}</p>}<div className="account-summary"><div><h2>Signed in</h2><p>{session.user.email}</p></div><button className="secondary" onClick={async () => {
     const { error } = await client.auth.signOut();
     if (error) setError(error.message);
-  }}>Sign out</button></div>{error && <p className="form-error" role="alert">{error}</p>}<AccountPreferences key={session.user.id} token={session.access_token} /><DeleteAccount token={session.access_token} onDeleted={onDeleted} /></section>;
+  }}>Sign out</button></div>{error && <p className="form-error" role="alert">{error}</p>}<AccountPreferences key={session.user.id} token={session.access_token} cache={preferencesCache} /><DeleteAccount token={session.access_token} onDeleted={onDeleted} /></section>;
 
   return <section className="account-page account-auth"><span className="eyebrow">Your next watch starts here</span><h1>{mode === "signup" ? "Create account" : mode === "reset" ? "Reset password" : mode === "recovery" ? "Choose a new password" : "Welcome back"}</h1><p className="muted">{mode === "signup" ? "Save your favorites and share what’s worth watching." : mode === "signin" ? "Sign in to your library, reviews, and recommendations." : "Let’s get you back into your account."}</p>
     <form className="composer account-form" onSubmit={submit}>

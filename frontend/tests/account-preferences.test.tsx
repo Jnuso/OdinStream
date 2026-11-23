@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Session } from "@supabase/supabase-js";
 import Account from "../src/components/Account";
+import { createPreferencesCache } from "../src/data/preferencesCache";
 
 vi.mock("../src/data/auth", () => ({ supabase: { auth: { signOut: vi.fn().mockResolvedValue({ error: null }) } } }));
 
@@ -11,6 +12,27 @@ const session = (id: string, token = id) => ({ user: { id, email: `${id}@example
 const props = { recovery: false, callbackError: null, onClearCallbackError: () => {}, onRecoveryComplete: () => {}, onDeleted: () => {} };
 const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+it("opens with preloaded preferences and caches the server-confirmed save", async () => {
+  const initial = { favorite_genres: ["Drama"], streaming_services: [] };
+  const updated = { favorite_genres: ["Drama", "Comedy"], streaming_services: [] };
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(response(initial))
+    .mockResolvedValueOnce(response(updated));
+  vi.stubGlobal("fetch", fetchMock);
+  const preferencesCache = createPreferencesCache("a");
+  await preferencesCache.load();
+  const view = render(<Account {...props} session={session("a")} preferencesCache={preferencesCache} />);
+  expect((screen.getByRole("checkbox", { name: "Drama" }) as HTMLInputElement).checked).toBe(true);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("checkbox", { name: "Comedy" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+  await screen.findByText("Preferences saved.");
+  view.unmount();
+  render(<Account {...props} session={session("a")} preferencesCache={preferencesCache} />);
+  expect((screen.getByRole("checkbox", { name: "Comedy" }) as HTMLInputElement).checked).toBe(true);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
 
 it("loads, saves, and reloads preferences separately for each account", async () => {
   const stored: Record<string, Preferences> = {
