@@ -64,7 +64,10 @@ it("keeps the setup step on token refresh and opens Discover after completion", 
   fireEvent.click(screen.getByRole("radio", { name: /^Private/ }));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   await act(async () => mocks.authChanged!("TOKEN_REFRESHED", { ...session, access_token: "refreshed-token" }));
-  fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+  expect(screen.getByRole("heading", { name: "Your streaming services" })).toBeTruthy();
+  for (let step = 2; step <= 5; step++) {
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+  }
   await screen.findByRole("heading", { name: "Discover" });
   expect(window.location.hash).toMatch(/^#\/discover(?:\?|$)/);
 });

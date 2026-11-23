@@ -149,19 +149,6 @@
   outline-offset: 3px;
 }
 
-.setup-preferences {
-  display: grid;
-  gap: 24px;
-  padding-top: 28px;
-  border-top: 1px solid #ffffff12;
-}
-
-.setup-preferences h2 {
-  margin: 0 0 6px;
-  font-size: 18px;
-  font-weight: 600;
-}
-
 .setup-choices {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

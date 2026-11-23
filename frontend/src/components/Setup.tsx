@@ -7,11 +7,19 @@ import { preferenceOptions } from "../data/preferencesCache";
 
 type Visibility = "public" | "private" | "";
 
+const setupSteps = [
+  { title: "Set up your profile", description: "Choose your username and who can see your profile." },
+  { title: "Your streaming services", description: "Select the services you use to filter Discover by US streaming availability." },
+  { title: "Your favorite genres", description: "Pick the genres you want to see more of in your recommendations." },
+  { title: "Your favorite movies and shows", description: "Try adding three favorites to start. You can keep adding more." },
+  { title: "Your favorite actors and directors", description: "Pick people whose work you want to see more of. Try starting with three." },
+];
+
 export default function Setup({ token, onComplete, onSignOut }: {
   token: string; onComplete: () => void; onSignOut: () => void;
 }) {
   const [username, setUsername] = useState("");
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState(1);
   const heading = useRef<HTMLHeadingElement>(null);
   const [visibility, setVisibility] = useState<Visibility>("");
   const [favoriteGenres, setFavoriteGenres] = useState<string[]>([]);
@@ -19,6 +27,7 @@ export default function Setup({ token, onComplete, onSignOut }: {
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const isLastStep = step === setupSteps.length;
 
   useEffect(() => {
     heading.current?.focus();
@@ -27,16 +36,16 @@ export default function Setup({ token, onComplete, onSignOut }: {
   function toggle(value: string, selected: string[], update: (values: string[]) => void) {
     update(selected.includes(value) ? selected.filter(item => item !== value) : [...selected, value]);
   }
-  async function finish(skip: boolean) {
+  async function finish(skipPeople: boolean) {
     if (busy) return;
     setBusy(true);
     setError("");
     try {
       await api("/api/me/setup", token, { method: "PUT", body: JSON.stringify({ username: username.trim(), visibility,
-        favorite_genres: skip ? [] : favoriteGenres,
-        streaming_services: skip ? [] : streamingServices,
-        favorite_titles: skip ? [] : favorites.flatMap(({ media_type, id }) => media_type ? [{ media_type, id }] : []),
-        favorite_people: skip ? [] : favorites.filter(item => !item.media_type).map(item => item.id),
+        favorite_genres: favoriteGenres,
+        streaming_services: streamingServices,
+        favorite_titles: favorites.flatMap(({ media_type, id }) => media_type ? [{ media_type, id }] : []),
+        favorite_people: skipPeople ? [] : favorites.filter(item => !item.media_type).map(item => item.id),
       }) });
       onComplete();
     } catch (err) {
@@ -60,23 +69,37 @@ export default function Setup({ token, onComplete, onSignOut }: {
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (step === 1) {
-      setError("");
-      setStep(2);
-    } else {
+    if (isLastStep) {
       void finish(false);
+    } else {
+      move(1);
     }
+  }
+
+  function move(direction: -1 | 1) {
+    setError("");
+    setStep(step + direction);
+  }
+
+  function skipStep() {
+    if (isLastStep) {
+      void finish(true);
+      return;
+    }
+    if (step === 2) setStreamingServices([]);
+    if (step === 3) setFavoriteGenres([]);
+    if (step === 4) setFavorites(previous => previous.filter(item => !item.media_type));
+    move(1);
   }
 
   return <AccountLayout>
     <header className="setup-heading">
-      <p className="setup-progress">Step {step} of 2</p>
-      <h1 ref={heading} tabIndex={-1}>{step === 1 ? "Set up your profile" : "Personalize your recommendations"}</h1>
-      <p>{step === 1 ? "Choose your username and who can see your profile."
-        : "What do you love watching? Start with three favorites, add more if you like, or skip for now."}</p>
+      <p className="setup-progress">Step {step} of {setupSteps.length}</p>
+      <h1 ref={heading} tabIndex={-1}>{setupSteps[step - 1].title}</h1>
+      <p>{setupSteps[step - 1].description}</p>
     </header>
     <form className="setup-form" onSubmit={submit} aria-busy={busy}>
-      {step === 1 ? <>
+      {step === 1 && <>
       <div className="setup-field">
         <label htmlFor="setup-username">Username <span className="setup-annotation">(required)</span></label>
         <input id="setup-username" value={username} onChange={event => setUsername(event.target.value)}
@@ -96,31 +119,27 @@ export default function Setup({ token, onComplete, onSignOut }: {
           </label>
         </div>
       </fieldset>
-      </> : <>
-      <FavoritesPicker selected={favorites} disabled={busy}
-        onAdd={item => setFavorites(previous => previous.some(pick => favoriteKey(pick) === favoriteKey(item)) ? previous : [...previous, item])}
-        onRemove={item => setFavorites(previous => previous.filter(pick => favoriteKey(pick) !== favoriteKey(item)))} />
-      <section className="setup-preferences" aria-labelledby="setup-preferences-heading">
-        <div><h2 id="setup-preferences-heading">Your preferences</h2>
-          <p className="setup-hint">Optional. Pick a few favorites, or skip these for now. You can change them later.</p></div>
-        <fieldset disabled={busy}><legend>Favorite movie and TV genres <span className="setup-annotation">(optional)</span></legend>
-          <div className="setup-choices">{preferenceOptions.favorite_genres.map(item => <label className="setup-choice" key={item}><input type="checkbox" checked={favoriteGenres.includes(item)} onChange={() => toggle(item, favoriteGenres, setFavoriteGenres)} />{item}</label>)}</div>
-        </fieldset>
-        <fieldset disabled={busy}><legend>Streaming services <span className="setup-annotation">(optional)</span></legend>
-          <p className="setup-hint">Choose the services you use to filter Discover by US streaming availability.</p>
-          <div className="setup-choices">{preferenceOptions.streaming_services.map(item => <label className="setup-choice" key={item}><input type="checkbox" checked={streamingServices.includes(item)} onChange={() => toggle(item, streamingServices, setStreamingServices)} />{item}</label>)}</div>
-        </fieldset>
-      </section>
       </>}
+      {(step === 4 || step === 5) && <FavoritesPicker key={step} scope={step === 4 ? "titles" : "people"}
+        selected={favorites.filter(item => Boolean(item.media_type) === (step === 4))} disabled={busy}
+        onAdd={item => setFavorites(previous => previous.some(pick => favoriteKey(pick) === favoriteKey(item)) ? previous : [...previous, item])}
+        onRemove={item => setFavorites(previous => previous.filter(pick => favoriteKey(pick) !== favoriteKey(item)))} />}
+      {step === 2 && <fieldset aria-label="Streaming services">
+        <div className="setup-choices">{preferenceOptions.streaming_services.map(item => <label className="setup-choice" key={item}>
+          <input type="checkbox" checked={streamingServices.includes(item)} onChange={() => toggle(item, streamingServices, setStreamingServices)} />{item}
+        </label>)}</div>
+      </fieldset>}
+      {step === 3 && <fieldset aria-label="Favorite genres">
+        <div className="setup-choices">{preferenceOptions.favorite_genres.map(item => <label className="setup-choice" key={item}>
+          <input type="checkbox" checked={favoriteGenres.includes(item)} onChange={() => toggle(item, favoriteGenres, setFavoriteGenres)} />{item}
+        </label>)}</div>
+      </fieldset>}
       {error && <p role="alert" className="form-error">{error}</p>}
       <div className="setup-actions">
-        {step === 1 ? <>
-          <button type="submit" className="primary">Continue</button>
-          <button type="button" className="secondary" onClick={onSignOut}>Sign out</button>
-        </> : <>
-          <button type="submit" className="primary" disabled={busy}>{busy ? "Saving…" : "Finish setup"}</button>
-          <button type="button" className="secondary" disabled={busy} onClick={() => void finish(true)}>Skip for now</button>
-          <button type="button" className="secondary" disabled={busy} onClick={() => { setError(""); setStep(1); }}>Back</button>
+        <button type="submit" className="primary" disabled={busy}>{busy ? "Saving…" : isLastStep ? "Finish setup" : "Continue"}</button>
+        {step === 1 ? <button type="button" className="secondary" onClick={onSignOut}>Sign out</button> : <>
+          <button type="button" className="secondary" disabled={busy} onClick={skipStep}>Skip for now</button>
+          <button type="button" className="secondary" disabled={busy} onClick={() => move(-1)}>Back</button>
         </>}
       </div>
     </form>

@@ -4,14 +4,15 @@ import { favoriteKey, type Favorite } from "../data/favorites";
 
 type SearchResults = { items: Favorite[]; page: number; total_pages: number };
 
-export default function FavoritesPicker({ selected, disabled, onAdd, onRemove }: {
+export default function FavoritesPicker({ scope = "all", selected, disabled, onAdd, onRemove }: {
+  scope?: "all" | "titles" | "people";
   selected: Favorite[];
   disabled: boolean;
   onAdd: (item: Favorite) => void;
   onRemove: (item: Favorite) => void;
 }) {
   const id = useId();
-  const [category, setCategory] = useState("titles");
+  const [category, setCategory] = useState(scope === "people" ? "people" : "titles");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [attempt, setAttempt] = useState(0);
@@ -44,9 +45,9 @@ export default function FavoritesPicker({ selected, disabled, onAdd, onRemove }:
   const selectedKeys = new Set(selected.map(favoriteKey));
 
   return <fieldset className="favorite-picker" disabled={disabled}>
-    <legend>Favorite movies, shows, actors and directors</legend>
-    <div className="favorite-search-fields">
-      <div className="setup-field">
+    {scope === "all" && <legend>Favorite movies, shows, actors and directors</legend>}
+    <div className={scope === "people" ? undefined : "favorite-search-fields"}>
+      {scope !== "people" && <div className="setup-field">
         <label htmlFor={`${id}-category`}>Search for</label>
         <select id={`${id}-category`} value={category} onChange={event => {
           setCategory(event.target.value);
@@ -55,9 +56,9 @@ export default function FavoritesPicker({ selected, disabled, onAdd, onRemove }:
           <option value="titles">Movies and TV shows</option>
           <option value="movie">Movies</option>
           <option value="tv">TV shows</option>
-          <option value="people">Actors and directors</option>
+          {scope === "all" && <option value="people">Actors and directors</option>}
         </select>
-      </div>
+      </div>}
       <div className="setup-field">
         <label htmlFor={`${id}-query`}>{category === "people" ? "Name" : "Title"}</label>
         <input id={`${id}-query`} type="search" value={query} maxLength={200} onKeyDown={event => {
