@@ -22,6 +22,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/me/saved-titles", tags=["library"])
 MediaType = Literal["movie", "tv"]
 Status = Literal["watchlist", "watched", "watching", "completed", "paused", "dropped"]
+LibraryGroup = Literal["in-progress", "watchlist", "history"]
+GROUP_STATUSES: dict[LibraryGroup, list[str]] = {
+    "in-progress": ["watching", "paused"],
+    "watchlist": ["watchlist"],
+    "history": ["watched", "completed", "dropped"],
+}
 ALLOWED = {"movie": {"watchlist", "watched"},
            "tv": {"watchlist", "watching", "completed", "paused", "dropped"}}
 COLUMNS = "id, media_type, tmdb_id, status, created_at, updated_at"
@@ -59,12 +65,15 @@ class PostgresLibraryStore:
             logger.exception("Library database query failed")
             raise APIError(503, "library_unavailable", "Your library is unavailable right now. Try again.") from exc
 
-    def list(self, user_id: str, media_type: str | None, status: str | None, limit: int | None = None, offset: int = 0):
+    def list(self, user_id: str, media_type: str | None, status: str | None, limit: int | None = None, offset: int = 0, *, group: LibraryGroup | None = None):
+        statuses = GROUP_STATUSES[group] if group else None
         return self.run(user_id, f"""select {COLUMNS} from public.saved_titles
             where user_id = %s and (%s::text is null or media_type = %s)
               and (%s::text is null or status = %s)
-            order by created_at desc, id desc limit %s offset %s""",
-            (user_id, media_type, media_type, status, status, limit, offset), many=True)
+              and (%s::text[] is null or status = any(%s::text[]))
+            order by case when %s::text = 'in-progress' and status = 'paused' then 1 else 0 end,
+                     created_at desc, id desc limit %s offset %s""",
+            (user_id, media_type, media_type, status, status, statuses, statuses, group, limit, offset), many=True)
 
     def create(self, user_id: str, media_type: str, tmdb_id: int, status: str):
         return self.run(user_id, f"""insert into public.saved_titles (user_id, media_type, tmdb_id, status)
@@ -197,9 +206,11 @@ def unmark_season(entry_id: UUID, season: int, user: AuthenticatedUser = Depends
 
 @router.get("")
 def list_titles(media_type: MediaType | None = Query(default=None), status: Status | None = Query(default=None),
+                group: LibraryGroup | None = Query(default=None),
                 limit: int = Query(default=20, ge=1, le=50), offset: int = Query(default=0, ge=0),
                 user: AuthenticatedUser = Depends(current_user), store: PostgresLibraryStore = Depends(library_store)):
-    rows = store.list(user.id, media_type, status, limit + 1, offset)
+    group_filter = {"group": group} if group is not None else {}
+    rows = store.list(user.id, media_type, status, limit + 1, offset, **group_filter)
     return {"items": rows[:limit], "next_offset": offset + limit if len(rows) > limit else None}
 
 

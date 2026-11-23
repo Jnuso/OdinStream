@@ -7,7 +7,7 @@ import jwt
 from fastapi.testclient import TestClient
 
 from app.errors import APIError
-from app.library import library_store
+from app.library import GROUP_STATUSES, PostgresLibraryStore, library_store
 from app.main import app
 from app.settings import Settings, get_settings
 
@@ -18,10 +18,13 @@ class FakeStore:
         self.progress = {}
         self.counter = 0
 
-    def list(self, user_id, media_type, status, limit=None, offset=0):
+    def list(self, user_id, media_type, status, limit=None, offset=0, *, group=None):
         rows = [row for owner, row in self.rows.values() if owner == user_id
                 and (media_type is None or row["media_type"] == media_type)
-                and (status is None or row["status"] == status)]
+                and (status is None or row["status"] == status)
+                and (group is None or row["status"] in GROUP_STATUSES[group])]
+        if group == "in-progress":
+            rows.sort(key=lambda row: row["status"] == "paused")
         return rows[offset:offset + limit] if limit is not None else rows[offset:]
 
     def create(self, user_id, media_type, tmdb_id, status):
@@ -85,6 +88,36 @@ class LibraryTest(unittest.TestCase):
         token = jwt.encode({"sub": user, "aud": "authenticated", "iss": self.settings.issuer,
                             "exp": int(time.time()) + 600, "role": "authenticated"}, self.secret, algorithm="HS256")
         return {"Authorization": "Bearer " + token}
+
+    def test_group_query_filters_before_paginating_and_keeps_status_filter(self):
+        for title_id, (media_type, status) in enumerate([
+            ("tv", "paused"), ("movie", "watched"), ("tv", "watching"),
+            ("movie", "watchlist"), ("tv", "completed"), ("tv", "dropped"),
+        ], start=1):
+            self.store.create(self.user_a, media_type, title_id, status)
+        self.store.create(self.user_b, "tv", 99, "watching")
+        headers = self.headers(self.user_a)
+        base = "/api/me/saved-titles"
+        first = self.client.get(base, params={"group": "in-progress", "limit": 1}, headers=headers).json()
+        self.assertEqual([item["status"] for item in first["items"]], ["watching"])
+        self.assertEqual(first["next_offset"], 1)
+        second = self.client.get(base, params={"group": "in-progress", "offset": 1}, headers=headers).json()
+        self.assertEqual([item["status"] for item in second["items"]], ["paused"])
+        self.assertIsNone(second["next_offset"])
+        for group, statuses in [("watchlist", ["watchlist"]), ("history", ["watched", "completed", "dropped"])]:
+            rows = self.client.get(base, params={"group": group}, headers=headers).json()["items"]
+            self.assertEqual([item["status"] for item in rows], statuses)
+        response = self.client.get(base, params={"status": "completed"}, headers=headers).json()
+        self.assertEqual([item["status"] for item in response["items"]], ["completed"])
+        self.assertEqual(self.client.get(base, params={"group": "bad"}, headers=headers).status_code, 422)
+
+    def test_store_passes_group_as_bound_status_array(self):
+        store = PostgresLibraryStore("test")
+        with patch.object(store, "run") as run:
+            store.list(self.user_a, None, None, 2, 1, group="history")
+        _, query, params = run.call_args.args
+        self.assertLess(query.index("status = any"), query.index("limit"))
+        self.assertEqual(params[-5:], (GROUP_STATUSES["history"], GROUP_STATUSES["history"], "history", 2, 1))
 
     def test_owner_isolation_duplicate_and_statuses(self):
         a, b = self.headers(self.user_a), self.headers(self.user_b)

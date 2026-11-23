@@ -14,20 +14,21 @@ it("renders a preloaded library row before catalog details arrive", async () => 
   let finishCatalog!: (response: Response) => void;
   const catalog = new Promise<Response>(resolve => { finishCatalog = resolve; });
   const fetchMock = vi.fn((input: RequestInfo | URL) => {
-    if (String(input).endsWith("/api/me/saved-titles")) {
-      return Promise.resolve(Response.json({ items: [{ id: "movie", media_type: "movie", tmdb_id: 42, status: "watchlist" }] }));
+    if (String(input).includes("/api/me/saved-titles?group=in-progress")) {
+      return Promise.resolve(Response.json({ items: [{ id: "show", media_type: "tv", tmdb_id: 42, status: "watching" }] }));
     }
+    if (String(input).endsWith("/episodes")) return Promise.resolve(Response.json({ items: [], last_watched: null }));
     return catalog;
   });
   vi.stubGlobal("fetch", fetchMock);
   const cache = createLibraryCache("test-token");
-  const preload = cache.load();
-  expect(cache.load()).toBe(preload);
+  const preload = cache.pages["in-progress"].load();
+  expect(cache.pages["in-progress"].load()).toBe(preload);
   await preload;
 
   render(<Library token="test-token" cache={cache} />);
   expect(screen.getByText("Loading title details…")).toBeTruthy();
-  expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/api/me/saved-titles"))).toHaveLength(1);
+  expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/me/saved-titles?group=in-progress"))).toHaveLength(1);
   finishCatalog(Response.json({ name: "Ready to watch", poster_path: null, seasons: [] }));
   await screen.findByText("Ready to watch");
 });
@@ -40,16 +41,16 @@ it("discards a pre-mutation response and keeps separate account caches", async (
     .mockResolvedValueOnce(Response.json({ items: [] }));
   vi.stubGlobal("fetch", fetchMock);
   const cache = createLibraryCache("first-token");
-  const previous = cache.load();
+  const previous = cache.pages["in-progress"].load();
   cache.invalidate();
-  await cache.load();
+  await cache.pages["in-progress"].load();
   finishPrevious(Response.json({ items: [], next_offset: 1 }));
   await previous;
-  expect(cache.peek()?.next_offset).toBe(2);
+  expect(cache.pages["in-progress"].peek()?.next_offset).toBe(2);
 
   const other = createLibraryCache("second-token");
-  expect(other.peek()).toBeUndefined();
-  await other.load();
+  expect(other.pages["in-progress"].peek()).toBeUndefined();
+  await other.pages["in-progress"].load();
   expect(new Headers(fetchMock.mock.calls[2][1].headers).get("Authorization")).toBe("Bearer second-token");
 });
 

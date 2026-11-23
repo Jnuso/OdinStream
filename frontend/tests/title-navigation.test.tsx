@@ -173,6 +173,6 @@ it.each(["library", "feed", "profile/me"])("opens title details over %s without 
   expect(window.location.hash).toBe(`#/${route}`);
   if (route === "library") {
     expect(screen.getByRole("button", { name: "Watchlist", exact: true, pressed: true })).toBeTruthy();
-    expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url), "http://localhost").pathname === "/api/me/saved-titles" && !String(url).includes("?"))).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url), "http://localhost").pathname === "/api/me/saved-titles" && String(url).includes("group=watchlist"))).toHaveLength(1);
   }
 });

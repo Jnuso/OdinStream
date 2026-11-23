@@ -91,7 +91,7 @@ export default function App() {
     if (!canPreload || discoverReadyToken !== token || !preferencesCache) return;
     let active = true;
     void (async () => {
-      for (const cache of [libraryCache, feedCache, ownProfile.posts, preferencesCache]) {
+      for (const cache of [libraryCache.pages["in-progress"], feedCache, ownProfile.posts, preferencesCache]) {
         if (!active) break;
         await cache.load().catch(() => {});
       }
