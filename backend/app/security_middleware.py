@@ -34,13 +34,8 @@ def _get_header(headers: list[tuple[bytes, bytes]], name: bytes) -> str:
     return ""
 
 
-def _client_ip(scope: dict[str, Any], *, trust_proxy_headers: bool = True) -> str:
-    if trust_proxy_headers:
-        xff = _get_header(scope.get("headers", []), b"x-forwarded-for")
-        if xff:
-            first = xff.split(",")[0].strip()
-            if first:
-                return first
+def _client_ip(scope: dict[str, Any]) -> str:
+    # Uvicorn resolves forwarding headers from trusted proxy peers.
     client = scope.get("client")
     if client and isinstance(client, (tuple, list)) and client[0]:
         return str(client[0])
@@ -215,14 +210,10 @@ class RateLimitMiddleware:
         *,
         limiter: SlidingWindowRateLimiter | None = None,
         enabled: bool = True,
-        trust_proxy_headers: bool = True,
-        rate_limit_testclient: bool = False,
     ) -> None:
         self.app = app
         self.limiter = limiter or SlidingWindowRateLimiter()
         self.enabled = enabled
-        self.trust_proxy_headers = trust_proxy_headers
-        self.rate_limit_testclient = rate_limit_testclient
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope.get("type") != "http" or not self.enabled:
@@ -236,11 +227,7 @@ class RateLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
-        ip = _client_ip(scope, trust_proxy_headers=self.trust_proxy_headers)
-        if ip == "testclient" and not self.rate_limit_testclient:
-            await self.app(scope, receive, send)
-            return
-
+        ip = _client_ip(scope)
         key = f"{rule.name}:{ip}"
         allowed, remaining, retry_after = self.limiter.check(key, rule)
         if not allowed:
@@ -279,7 +266,7 @@ class RequestLoggingMiddleware:
             return
 
         incoming_id = _get_header(scope.get("headers", []), b"x-request-id")
-        if incoming_id and len(incoming_id) <= 64 and all(c.isalnum() or c in "-_." for c in incoming_id):
+        if incoming_id and incoming_id.isascii() and len(incoming_id) <= 64 and all(c.isalnum() or c in "-_." for c in incoming_id):
             request_id = incoming_id
         else:
             request_id = uuid.uuid4().hex[:16]

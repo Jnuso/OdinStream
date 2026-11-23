@@ -106,7 +106,7 @@ class SocialTest(unittest.TestCase):
         self.store = FakeStore()
         app.dependency_overrides[get_settings] = lambda: self.settings
         app.dependency_overrides[social_store] = lambda: self.store
-        self.client = TestClient(app)
+        self.client = TestClient(app, client=(self.id(), 50000))
         self.user_a, self.user_b = str(uuid4()), str(uuid4())
         self.store.profiles[self.user_a] = {"id": self.user_a, "display_name": "Ada", "handle": "ada.111111", "bio": ""}
         self.store.profiles[self.user_b] = {"id": self.user_b, "display_name": "Grace", "handle": "grace.222222", "bio": ""}

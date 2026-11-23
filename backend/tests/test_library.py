@@ -75,7 +75,7 @@ class LibraryTest(unittest.TestCase):
         self.store = FakeStore()
         app.dependency_overrides[get_settings] = lambda: self.settings
         app.dependency_overrides[library_store] = lambda: self.store
-        self.client = TestClient(app)
+        self.client = TestClient(app, client=(self.id(), 50000))
         self.user_a, self.user_b = str(uuid4()), str(uuid4())
 
     def tearDown(self):

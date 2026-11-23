@@ -15,7 +15,7 @@ class AuthenticationTest(unittest.TestCase):
         self.secret = "a-test-secret-that-is-longer-than-32-bytes"
         self.settings = Settings("https://example.supabase.co", self.secret, "", ())
         app.dependency_overrides[get_settings] = lambda: self.settings
-        self.client = TestClient(app)
+        self.client = TestClient(app, client=(self.id(), 50000))
         self.user_id = str(uuid.uuid4())
 
     def tearDown(self):

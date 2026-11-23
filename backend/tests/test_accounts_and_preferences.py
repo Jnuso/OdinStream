@@ -73,7 +73,7 @@ class PreferencesRoutesTest(unittest.TestCase):
         self.store = MemoryPreferenceStore()
         app.dependency_overrides[get_settings] = lambda: self.settings
         app.dependency_overrides[preference_store] = lambda: self.store
-        self.client = TestClient(app)
+        self.client = TestClient(app, client=(self.id(), 50000))
         self.headers = {"Authorization": f"Bearer {_token(self.user_a)}"}
 
     def tearDown(self) -> None:
@@ -108,7 +108,7 @@ class SetupRoutesTest(unittest.TestCase):
         self.user_a = str(uuid4())
         self.settings = Settings(SUPABASE_URL, TEST_SECRET, "postgresql://odin_api_login:pw@localhost:5432/postgres", ())
         app.dependency_overrides[get_settings] = lambda: self.settings
-        self.client = TestClient(app)
+        self.client = TestClient(app, client=(self.id(), 50000))
         self.headers = {"Authorization": f"Bearer {_token(self.user_a)}"}
 
     def tearDown(self) -> None:

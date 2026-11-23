@@ -17,7 +17,7 @@ from app.settings import Settings, get_settings
 class CatalogTest(unittest.TestCase):
     def setUp(self):
         clear_tmdb_cache()
-        self.client = TestClient(app)
+        self.client = TestClient(app, client=(self.id(), 50000))
 
     def tearDown(self):
         clear_tmdb_cache()

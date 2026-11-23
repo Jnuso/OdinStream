@@ -61,7 +61,7 @@ class PrivacyRoutesTest(unittest.TestCase):
         self.store = PrivacyStore(self.owner, self.viewer)
         app.dependency_overrides[get_settings] = lambda: self.settings
         app.dependency_overrides[social_store] = lambda: self.store
-        self.client = TestClient(app)
+        self.client = TestClient(app, client=(self.id(), 50000))
 
     def tearDown(self):
         app.dependency_overrides.clear()
