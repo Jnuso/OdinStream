@@ -215,12 +215,28 @@ def person_credits(person_id: int) -> dict:
     return {"items": sorted(titles.values(), key=lambda title: title["release_date"] or "", reverse=True)}
 
 
+def credited_people(people: list[dict]) -> list[dict]:
+    credits = {}
+    for person in people:
+        if person.get("id") is not None and person.get("name"):
+            credits.setdefault(person["id"], {
+                "id": person["id"], "name": person["name"], "profile_path": person.get("profile_path"),
+            })
+    return list(credits.values())
+
+
+def directors(crew: list[dict]) -> list[dict]:
+    return credited_people([person for person in crew if person.get("job") == "Director"])
+
+
 @router.get("/{media_type}/{tmdb_id}")
 def title_details(media_type: MediaType, tmdb_id: int) -> dict:
     if tmdb_id <= 0:
         raise APIError(422, "invalid_title", "Title IDs must be positive.")
-    append = "watch/providers,aggregate_credits" if media_type == "tv" else "watch/providers"
+    credits_key = "aggregate_credits" if media_type == "tv" else "credits"
+    append = f"watch/providers,{credits_key}"
     data = tmdb_get(f"/{media_type}/{tmdb_id}", {"append_to_response": append})
+    credits = data.get(credits_key) or {}
     providers = data.get("watch/providers")
     if not isinstance(providers, dict):
         providers = tmdb_get(f"/{media_type}/{tmdb_id}/watch/providers")
@@ -229,6 +245,8 @@ def title_details(media_type: MediaType, tmdb_id: int) -> dict:
         **summarize(data, media_type),
         "runtime": data.get("runtime") if media_type == "movie" else None,
         "genres": [genre.get("name") for genre in data.get("genres", []) if genre.get("name")],
+        "creators": credited_people(data.get("created_by") or []) if media_type == "tv" else [],
+        "directors": directors(credits.get("crew") or []) if media_type == "movie" else [],
         "seasons": [{"season_number": season.get("season_number"), "name": season.get("name"),
                      "episode_count": season.get("episode_count")} for season in data.get("seasons", [])],
         "cast": [
@@ -238,9 +256,9 @@ def title_details(media_type: MediaType, tmdb_id: int) -> dict:
                 "profile_path": actor.get("profile_path"),
                 "characters": list(dict.fromkeys(
                     role["character"] for role in actor.get("roles") or [] if role.get("character")
-                )),
+                )) if media_type == "tv" else ([actor["character"]] if actor.get("character") else []),
             }
-            for actor in (data.get("aggregate_credits") or {}).get("cast") or []
+            for actor in credits.get("cast") or []
             if actor.get("id") is not None and actor.get("name")
         ],
         "availability": {
@@ -258,5 +276,6 @@ def season_details(tmdb_id: int, season_number: int) -> dict:
     data = tmdb_get(f"/tv/{tmdb_id}/season/{season_number}")
     return {"name": data.get("name"), "season_number": season_number,
             "episodes": [{"episode_number": episode.get("episode_number"), "name": episode.get("name"),
-                          "overview": episode.get("overview") or "", "air_date": episode.get("air_date")}
+                          "overview": episode.get("overview") or "", "air_date": episode.get("air_date"),
+                          "directors": directors(episode.get("crew") or [])}
                          for episode in data.get("episodes", [])]}

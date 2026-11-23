@@ -105,6 +105,20 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["availability"], {"link": None, "flatrate": [], "rent": [], "buy": []})
 
+    def test_movie_details_include_directors_and_cast(self):
+        director = {"id": 2, "name": "Director One", "profile_path": "/director.jpg"}
+        data = {"id": 1, "title": "A", "watch/providers": {}, "credits": {
+            "crew": [{**director, "job": "Director"}, {**director, "job": "Director"},
+                     {"id": 3, "name": "Producer", "job": "Producer"}],
+            "cast": [{"id": 4, "name": "Actor", "character": "Lead"}],
+        }}
+        with patch("app.catalog.tmdb_get", return_value=data) as fetch:
+            response = self.client.get("/api/catalog/movie/1")
+        fetch.assert_called_once_with("/movie/1", {"append_to_response": "watch/providers,credits"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["directors"], [director])
+        self.assertEqual(response.json()["cast"][0]["characters"], ["Lead"])
+
     def test_invalid_inputs(self):
         self.assertEqual(self.client.get("/api/catalog/search", params={"query": "  "}).status_code, 422)
         self.assertEqual(self.client.get("/api/catalog/movie/0").status_code, 422)
@@ -114,6 +128,7 @@ class CatalogTest(unittest.TestCase):
         data = {
             "id": 1,
             "name": "A show",
+            "created_by": [{"id": 5, "name": "Creator", "profile_path": "/creator.jpg"}],
             "watch/providers": {"results": {}},
             "aggregate_credits": {
                 "cast": [
@@ -128,6 +143,8 @@ class CatalogTest(unittest.TestCase):
             response = self.client.get("/api/catalog/tv/1")
         fetch.assert_called_once_with("/tv/1", {"append_to_response": "watch/providers,aggregate_credits"})
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["creators"], data["created_by"])
+        self.assertEqual(response.json()["directors"], [])
         self.assertEqual(response.json()["cast"], [
             {"id": 2, "name": "Actor One", "profile_path": "/portrait.jpg", "characters": ["Lead", "Double"]},
             {"id": 3, "name": "Actor Two", "profile_path": None, "characters": []},
@@ -150,11 +167,19 @@ class CatalogTest(unittest.TestCase):
                     self.assertEqual(raised.exception.status_code, status)
 
     def test_season_route(self):
-        data = {"name": "Season 1", "episodes": [{"episode_number": 1, "name": "Pilot"}]}
+        data = {"name": "Season 1", "episodes": [
+            {"episode_number": 1, "name": "Pilot",
+             "crew": [{"id": 7, "name": "Director", "job": "Director"}]},
+            {"episode_number": 2, "name": "Second"},
+        ]}
         with patch("app.catalog.tmdb_get", return_value=data):
             response = self.client.get("/api/catalog/tv/1/seasons/1")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["episodes"][0]["name"], "Pilot")
+        self.assertEqual(response.json()["episodes"][0]["directors"], [
+            {"id": 7, "name": "Director", "profile_path": None},
+        ])
+        self.assertEqual(response.json()["episodes"][1]["directors"], [])
 
     def test_person_credits_include_only_distinct_cast_titles(self):
         movie = {"id": 1, "media_type": "movie", "title": "Movie", "release_date": "2022-01-01"}

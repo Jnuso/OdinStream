@@ -3,9 +3,9 @@ import Modal from "./Modal";
 import Poster from "./Poster";
 import PostCard from "./PostCard";
 import Skeleton from "./Skeleton";
-import ActorCredits from "./ActorCredits";
+import ActorCredits, { ActorPortrait, type Actor } from "./ActorCredits";
 import { api } from "../data/api";
-import { formatYear, initials, type MediaType, type Post, type TitleSummary } from "../data/social";
+import { formatYear, type MediaType, type Post, type TitleSummary } from "../data/social";
 
 const CAST_PAGE_SIZE = 12;
 
@@ -23,10 +23,29 @@ type Details = Title & {
   seasons: { season_number: number; name: string; episode_count: number }[];
   availability: { link: string | null; flatrate: string[]; rent: string[]; buy: string[] };
   cast?: { id: number; name: string; profile_path: string | null; characters: string[] }[];
+  creators?: Actor[];
+  directors?: Actor[];
 };
-type Episode = { episode_number: number; name: string; overview: string; air_date: string | null };
+type Episode = { episode_number: number; name: string; overview: string; air_date: string | null; directors?: Actor[] };
 type SavedTitle = { media_type: MediaType; tmdb_id: number; status: string };
 type LibraryCheck = { token: string; mediaType: MediaType; id: number; status: string | null; error?: string };
+
+function PeopleCredits({ people, label, Heading = "h3" }: { people?: Actor[]; label: string; Heading?: "h3" | "h4" }) {
+  if (!people?.length) return null;
+  return (
+    <section className="title-cast">
+      <Heading>{label}</Heading>
+      <ul className="title-cast-list">
+        {people.map(person => (
+          <li key={person.id} className="title-cast-card">
+            <ActorPortrait actor={person} size="w185" />
+            <strong>{person.name}</strong>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 export default function TitleDetails({ selection, token, viewerId, reloadKey = 0, onClose, onReview, onOpenProfile, onEdit, onOpenTitle, onSaved, onFavoriteChange }: {
   selection: { media_type: MediaType; id: number }; token: string | null; viewerId?: string; reloadKey?: number;
@@ -221,6 +240,7 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
                         <strong>{episode.name || `Episode ${episode.episode_number}`}</strong>
                         {episode.air_date && ` · ${episode.air_date}`}
                         {episode.overview && <p>{episode.overview}</p>}
+                        <PeopleCredits people={episode.directors} label="Directed by" Heading="h4" />
                       </li>
                     ))}
                   </ol>
@@ -229,7 +249,10 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
                 ))}
             </section>
           )}
-          {detail.media_type === "tv" && (
+          {detail.media_type === "tv"
+            ? <PeopleCredits people={detail.creators} label="Created by" />
+            : <PeopleCredits people={detail.directors} label="Directed by" />}
+          {(detail.media_type === "tv" || cast.length > 0) && (
             <section className="title-cast">
               <h3>Cast</h3>
               {cast.length === 0 ? <p className="muted">Cast information is unavailable.</p> : (
@@ -237,13 +260,7 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
                   {cast.slice(0, visibleCastCount).map(actor => (
                     <li key={actor.id}>
                       <button className="title-cast-card" onClick={() => setSelectedActor(actor)}>
-                        <div className="title-cast-photo" aria-hidden="true">
-                          {initials(actor.name)}
-                          {actor.profile_path && (
-                            <img src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`} alt="" loading="lazy"
-                              onError={event => { event.currentTarget.hidden = true; }} />
-                          )}
-                        </div>
+                        <ActorPortrait actor={actor} size="w185" />
                         <strong>{actor.name}</strong>
                         {actor.characters.length > 0 && <span className="muted">{actor.characters.join(", ")}</span>}
                       </button>

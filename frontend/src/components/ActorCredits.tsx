@@ -17,10 +17,10 @@ function ageOn(birthday: string | null, deathday: string | null) {
   return Number(end.slice(0, 4)) - Number(birthday.slice(0, 4)) - Number(end.slice(5) < birthday.slice(5));
 }
 
-export function ActorPortrait({ actor }: { actor: Actor }) {
+export function ActorPortrait({ actor, size = "w342" }: { actor: Actor; size?: "w185" | "w342" }) {
   return <span className="title-cast-photo" aria-hidden="true">
     {initials(actor.name)}
-    {actor.profile_path && <img key={actor.profile_path} src={`https://image.tmdb.org/t/p/w342${actor.profile_path}`}
+    {actor.profile_path && <img key={actor.profile_path} src={`https://image.tmdb.org/t/p/${size}${actor.profile_path}`}
       alt="" loading="lazy" onError={event => { event.currentTarget.hidden = true; }} />}
   </span>;
 }

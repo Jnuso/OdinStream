@@ -23,6 +23,21 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); clearCatalogCache(); vi.unstubAllGlobals(); auth.changed = null; window.history.replaceState(null, "", "/"); });
 
+it("shows movie director portraits above the cast", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+    ...title, media_type: "movie",
+    directors: [{ id: 8, name: "A Director", profile_path: "/director.jpg" }],
+    cast: [{ id: 7, name: "An Actor", characters: [] }],
+  })));
+  render(<TitleDetails selection={{ media_type: "movie", id: title.id }} token={null}
+    onClose={vi.fn()} onOpenTitle={vi.fn()} />);
+  const directedBy = await screen.findByRole("heading", { name: "Directed by" });
+  const cast = screen.getByRole("heading", { name: "Cast" });
+  expect(directedBy.parentElement?.nextElementSibling).toBe(cast.parentElement);
+  expect(directedBy.parentElement?.querySelector("img")?.getAttribute("src")).toContain("/w185/director.jpg");
+  expect(screen.getByText("A Director")).toBeTruthy();
+});
+
 it("opens an actor's other credits and navigates to a credited title", async () => {
   const actor = { id: 7, name: "Adam Scott", profile_path: null, characters: ["Mark Scout"] };
   const movie = { ...title, media_type: "movie", name: "A movie", characters: ["Alex"] };
