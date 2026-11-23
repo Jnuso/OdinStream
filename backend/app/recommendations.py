@@ -23,6 +23,14 @@ MAX_TMDB_CALLS = 6
 MAX_WORKERS = MAX_TMDB_CALLS
 MAX_PEOPLE_LOOKUPS = 3
 MAX_INFERRED_PAGES = 3
+MAX_TITLE_SEEDS = 3
+MAX_MATCHES_PER_SEED = 8
+MAX_CANDIDATE_RATINGS = 24
+CHILDREN_GENRE = 10762
+AUDIENCE_RATINGS = {
+    "tv": {"TV-Y": 0, "TV-Y7": 0, "TV-Y7-FV": 0, "TV-G": 0, "TV-PG": 1, "TV-14": 2, "TV-MA": 2},
+    "movie": {"G": 0, "PG": 1, "PG-13": 2, "R": 2, "NC-17": 2},
+}
 
 GENRE_IDS: dict[str, dict[str, int]] = {
     "movie": {
@@ -40,12 +48,51 @@ GENRE_IDS: dict[str, dict[str, int]] = {
         "Action": 10759, "Fantasy": 10765, "Science Fiction": 10765,
     },
 }
-EXCLUDED_STATUSES = {"movie": {"watched"}, "tv": {"completed", "dropped"}}
-
-
 def excluded_titles(rows: Iterable[dict]) -> set[tuple[str, int]]:
-    return {(row["media_type"], row["tmdb_id"]) for row in rows
-            if row["status"] in EXCLUDED_STATUSES[row["media_type"]]}
+    return {(row["media_type"], row["tmdb_id"]) for row in rows}
+
+
+def audience(media_type: str, genre_ids: Iterable[int], metadata: dict) -> int | None:
+    if CHILDREN_GENRE in genre_ids:
+        return 0
+    region_key = "iso_3166_1"
+    ratings = []
+    for region in metadata.get("results") or []:
+        if region.get(region_key) != "US":
+            continue
+        if media_type == "tv":
+            ratings.append(region.get("rating"))
+        else:
+            ratings.extend(release.get("certification") for release in region.get("release_dates") or [])
+    return max((AUDIENCE_RATINGS[media_type][rating] for rating in ratings
+                if rating in AUDIENCE_RATINGS[media_type]), default=None)
+
+
+def rating_metadata(key: tuple[str, int]) -> dict:
+    media_type, title_id = key
+    endpoint = "content_ratings" if media_type == "tv" else "release_dates"
+    try:
+        return tmdb_get(f"/{media_type}/{title_id}/{endpoint}")
+    except APIError:
+        return {}
+
+
+def title_candidates(seed: dict) -> list[dict]:
+    try:
+        data = tmdb_get(f"/{seed['media_type']}/{seed['tmdb_id']}/recommendations")
+    except APIError:
+        return []
+    return [item for item in data.get("results") or []
+            if isinstance(item, dict) and item.get("id") and not item.get("adult")][:MAX_MATCHES_PER_SEED]
+
+
+def available_on_services(key: tuple[str, int], provider_ids: set[int]) -> bool:
+    try:
+        data = tmdb_get(f"/{key[0]}/{key[1]}/watch/providers")
+    except APIError:
+        return False
+    providers = (data.get("results") or {}).get("US", {}).get("flatrate") or []
+    return any(provider.get("provider_id") in provider_ids for provider in providers)
 
 
 def genre_requests(genres: list[str]) -> list[tuple[str, str, int]]:
@@ -136,6 +183,7 @@ def read_recommendations(settings: Config, limit: int = Query(default=12, ge=1, 
     choices = preferences.get(user.id)
     genres = choices["favorite_genres"]
     providers = ""
+    provider_ids: set[int] = set()
     if streaming_only:
         provider_ids = streaming_provider_ids(choices["streaming_services"])
         if not provider_ids:
@@ -144,13 +192,29 @@ def read_recommendations(settings: Config, limit: int = Query(default=12, ge=1, 
     excluded = excluded_titles(library.list(user.id, None, None))
     favorite_titles, favorite_people = favorite_signals(user, settings)
     excluded.update((title["media_type"], title["tmdb_id"]) for title in favorite_titles)
-    inferred_genres = title_genres(favorite_titles)
+    seeds = favorite_titles[:MAX_TITLE_SEEDS]
+    inferred_genres = title_genres(seeds)
 
     scores: dict[tuple[str, int], int] = {}
     candidates: dict[tuple[str, int], dict] = {}
     reasons: dict[tuple[str, int], str] = {}
     candidate_genres: dict[tuple[str, int], set[int]] = {}
     favorite_reasons: dict[tuple[str, int], str] = {}
+    direct_matches: dict[tuple[str, int], set[int]] = {}
+    best_title_signal: dict[tuple[str, int], int] = {}
+    pages = []
+
+    if seeds:
+        with ThreadPoolExecutor(max_workers=MAX_TITLE_SEEDS) as pool:
+            for index, matches in enumerate(pool.map(title_candidates, seeds)):
+                for item in matches:
+                    key = (seeds[index]["media_type"], int(item["id"]))
+                    if key in excluded:
+                        continue
+                    direct_matches.setdefault(key, set()).add(index)
+                    candidates.setdefault(key, item)
+                    candidate_genres.setdefault(key, set()).update(item.get("genre_ids") or [])
+                    scores.setdefault(key, 0)
 
     if genres or providers or inferred_genres:
         manual = genre_requests(genres)
@@ -159,18 +223,15 @@ def read_recommendations(settings: Config, limit: int = Query(default=12, ge=1, 
                     for media_type, genre_id in sorted(inferred_genres, key=lambda key: -len(inferred_genres[key]))
                     if (media_type, genre_id) not in manual_keys][:MAX_INFERRED_PAGES]
         requests: list[tuple[str, str, int | None]] = [*manual[:MAX_TMDB_CALLS - len(inferred)], *inferred]
-        if providers and not genres:
+        if providers and not genres and not inferred:
             requests.extend([("movie", "", None), ("tv", "", None)])
         pages = fetch_discover_pages(requests, providers)
-        if not pages and (providers or (genres and not favorite_people)):
-            raise APIError(503, "recommendations_unavailable",
-                           "Recommendations are unavailable right now. Try again.")
         for media_type, genre, genre_id, data in pages:
             for item in data.get("results", []):
                 if not isinstance(item, dict) or item.get("id") is None:
                     continue
                 key = (media_type, int(item["id"]))
-                if key in excluded:
+                if key in excluded or item.get("adult"):
                     continue
                 scores[key] = scores.get(key, 0) + int(bool(genre))
                 candidates.setdefault(key, item)
@@ -184,6 +245,19 @@ def read_recommendations(settings: Config, limit: int = Query(default=12, ge=1, 
     else:
         basis = "popular"
 
+    if providers and direct_matches:
+        filtered_keys = {(media_type, item["id"]) for media_type, _, _, data in pages
+                         for item in data.get("results", []) if isinstance(item, dict) and item.get("id")}
+        unverified = [key for key in direct_matches if key not in filtered_keys]
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+            available = pool.map(partial(available_on_services, provider_ids=provider_ids), unverified)
+            for key, match in zip(unverified, available):
+                if not match:
+                    candidates.pop(key)
+                    candidate_genres.pop(key)
+                    scores.pop(key)
+                    direct_matches.pop(key)
+
     if favorite_people:
         with ThreadPoolExecutor(max_workers=MAX_PEOPLE_LOOKUPS) as pool:
             for name, matches in pool.map(person_candidates, favorite_people[:MAX_PEOPLE_LOOKUPS]):
@@ -195,17 +269,53 @@ def read_recommendations(settings: Config, limit: int = Query(default=12, ge=1, 
                     candidate_genres.setdefault(key, set()).update(item.get("genre_ids") or [])
                     favorite_reasons.setdefault(key, name)
 
-    for key, ids in candidate_genres.items():
-        for genre_id in sorted(ids):
-            matches = inferred_genres.get((key[0], genre_id))
-            if matches:
-                scores[key] += len(matches)
-                favorite_reasons.setdefault(key, matches[0])
+    if seeds:
+        seed_keys = [(seed["media_type"], seed["tmdb_id"]) for seed in seeds]
+        seed_genres = [set(seed["genre_ids"]) for seed in seeds]
+        title_signals = {
+            key: [(index, index in direct_matches.get(key, ()), len(ids & genres_for_seed))
+                  for index, (seed_key, genres_for_seed) in enumerate(zip(seed_keys, seed_genres))
+                  if key[0] == seed_key[0] and (index in direct_matches.get(key, ()) or ids & genres_for_seed)]
+            for key, ids in candidate_genres.items()
+        }
+        rating_candidates = sorted(
+            (key for key, signals in title_signals.items() if signals),
+            key=lambda key: (bool(direct_matches.get(key)), scores[key],
+                             max(overlap for _, _, overlap in title_signals[key]),
+                             candidates[key].get("popularity") or 0),
+            reverse=True,
+        )[:MAX_CANDIDATE_RATINGS]
+        rating_keys = [*seed_keys, *rating_candidates]
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+            metadata = dict(zip(rating_keys, pool.map(rating_metadata, rating_keys)))
+        seed_audiences = [audience(key[0], ids, metadata[key]) for key, ids in zip(seed_keys, seed_genres)]
+
+        for key, signals in title_signals.items():
+            candidate_audience = audience(key[0], candidate_genres[key], metadata.get(key, {}))
+            for index, direct, overlap in signals:
+                seed_audience = seed_audiences[index]
+                mismatch = (seed_audience is not None and candidate_audience is not None
+                            and abs(seed_audience - candidate_audience) == 2)
+                if mismatch:
+                    # Keep the weak relation below relevant matches without
+                    # penalizing a match to a different favorite.
+                    favorite_reasons.setdefault(key, seeds[index]["name"])
+                    continue
+                same_audience = seed_audience is not None and seed_audience == candidate_audience
+                strength = (6 if direct else 0) + overlap + int(same_audience)
+                scores[key] += strength
+                if strength > best_title_signal.get(key, 0):
+                    best_title_signal[key] = strength
+                    favorite_reasons[key] = seeds[index]["name"]
+
+    if not candidates and not pages and (providers or genres):
+        raise APIError(503, "recommendations_unavailable",
+                       "Recommendations are unavailable right now. Try again.")
 
     if favorite_reasons:
         basis = "favorites"
         reasons.update(favorite_reasons)
-    if not candidates and not providers and (not genres or favorite_people):
+    if not candidates and not providers and not genres:
         data = tmdb_get("/trending/all/week")
         for item in data.get("results", []):
             if not isinstance(item, dict) or item.get("media_type") not in ("movie", "tv"):
@@ -217,6 +327,8 @@ def read_recommendations(settings: Config, limit: int = Query(default=12, ge=1, 
             scores[key] = 1
         basis = "popular"
 
+    if genres or favorite_titles or favorite_people:
+        candidates = {key: item for key, item in candidates.items() if key in reasons or basis == "popular"}
     ordered = sorted(candidates, key=lambda key: (-scores[key], -(candidates[key].get("popularity") or 0)))
     items = []
     for key in ordered[:limit]:

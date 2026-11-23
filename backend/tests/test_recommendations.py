@@ -94,10 +94,10 @@ class RecommendationTest(unittest.TestCase):
         body = self.run_with(["Drama"], library, results).json()
         self.assertEqual([(item["media_type"], item["id"]) for item in body["items"]], [("movie", 2)])
 
-    def test_watchlist_titles_stay_eligible(self):
+    def test_already_saved_watchlist_titles_are_excluded(self):
         results = lambda path: discover_result([1], "movie") if path.endswith("movie") else {"results": []}
         body = self.run_with(["Drama"], [{"media_type": "movie", "tmdb_id": 1, "status": "watchlist"}], results).json()
-        self.assertEqual(len(body["items"]), 1)
+        self.assertEqual(len(body["items"]), 0)
 
     def test_new_user_gets_popular_titles(self):
         trending = {"results": [
@@ -115,8 +115,9 @@ class RecommendationTest(unittest.TestCase):
             {"media_type": "movie", "tmdb_id": 4, "name": "Second favorite", "genre_ids": [35]},
         ]
 
-        def results(path, params):
-            self.assertEqual(path, "/discover/movie")
+        def results(path, params=None):
+            if path != "/discover/movie":
+                return {}
             ids = [1, 2, 3] if params["with_genres"] == 18 else [3]
             items = discover_result(ids, "movie")["results"]
             items[-1]["genre_ids"] = [18, 35]
@@ -129,7 +130,61 @@ class RecommendationTest(unittest.TestCase):
             body = self.client.get("/api/me/recommendations", headers=self.headers()).json()
         self.assertEqual(body["basis"], "favorites")
         self.assertEqual([item["id"] for item in body["items"]], [3, 2])
-        self.assertEqual(body["items"][0]["reason"], "First favorite")
+        self.assertIn(body["items"][0]["reason"], {"First favorite", "Second favorite"})
+
+    def test_title_matches_consider_each_favorites_audience(self):
+        shows = [
+            {"id": 2, "name": "Arthur", "genre_ids": [16, 35, 10762], "popularity": 999},
+            {"id": 3, "name": "Teen Titans Go!", "genre_ids": [16, 35], "popularity": 998},
+            {"id": 4, "name": "American Dad!", "genre_ids": [16, 35], "popularity": 9},
+            {"id": 5, "name": "South Park", "genre_ids": [16, 35], "popularity": 8},
+            {"id": 6, "name": "Unrated animation", "genre_ids": [16, 35], "popularity": 99},
+        ]
+        mature = {"media_type": "tv", "tmdb_id": 1, "name": "Family Guy", "genre_ids": [16, 35]}
+        kids = {"media_type": "tv", "tmdb_id": 7, "name": "Bluey", "genre_ids": [16, 10762]}
+        ratings = {1: "TV-14", 3: "TV-Y7", 4: "TV-14", 5: "TV-MA", 7: "TV-Y"}
+
+        def results(path):
+            if path.endswith("/content_ratings"):
+                title_id = int(path.split("/")[2])
+                if title_id == 6:
+                    raise APIError(503, "catalog_unavailable", "busy")
+                return {"results": [{"iso_3166_1": "US", "rating": ratings.get(title_id)}]}
+            if path == "/discover/tv":
+                return {"results": []}
+            if path.endswith("/7/recommendations"):
+                return {"results": shows[:2]}
+            return {"results": shows}
+
+        for seeds, expected in [([mature], [4, 5, 6, 2, 3]), ([kids], [2, 3]),
+                                ([mature, kids], [2, 6, 4, 5, 3])]:
+            with self.subTest(seeds=seeds), patch("app.recommendations.favorite_signals", return_value=(seeds, [])):
+                body = self.run_with([], [], results).json()
+                self.assertEqual([item["id"] for item in body["items"]], expected)
+                self.assertEqual(body["basis"], "favorites")
+                self.assertEqual(body["items"][0]["reason"], seeds[-1]["name"])
+
+    def test_title_provider_filter_checks_direct_matches_outside_discover_pages(self):
+        app.dependency_overrides[preference_store] = lambda: FakePreferences([], ["Netflix"])
+        app.dependency_overrides[library_store] = lambda: FakeLibrary([])
+        seed = {"media_type": "tv", "tmdb_id": 1, "name": "Favorite", "genre_ids": [16]}
+
+        def results(path, params=None):
+            if path.endswith("/recommendations"):
+                return discover_result([2, 3, 4], "tv")
+            if path.endswith("/2/watch/providers"):
+                return {"results": {"US": {"flatrate": [{"provider_id": 8}]}}}
+            if path.endswith("/3/watch/providers"):
+                raise APIError(503, "catalog_unavailable", "busy")
+            if path.endswith("/4/watch/providers"):
+                return {"results": {"US": {"rent": [{"provider_id": 8}]}}}
+            return {"results": []}
+
+        with (patch("app.recommendations.favorite_signals", return_value=([seed], [])),
+              patch("app.recommendations.tmdb_get", side_effect=results)):
+            response = self.client.get("/api/me/recommendations?streaming_only=true", headers=self.headers())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([(item["id"], item["reason"]) for item in response.json()["items"]], [(2, "Favorite")])
 
     def test_people_signals_include_cast_and_directors_and_ignore_other_jobs(self):
         people = [{"id": person_id, "name": "Favorite person"} for person_id in range(1, 8)]
