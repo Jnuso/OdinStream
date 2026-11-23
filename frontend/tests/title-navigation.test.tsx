@@ -38,6 +38,31 @@ it("shows movie director portraits above the cast", async () => {
   expect(screen.getByText("A Director")).toBeTruthy();
 });
 
+it.each([
+  { mediaType: "tv", field: "creators", role: "creator", label: "creator credits" },
+  { mediaType: "movie", field: "directors", role: "director", label: "directing credits" },
+] as const)("opens the shared profile with $label from a $mediaType title", async ({ mediaType, field, role, label }) => {
+  const person = { id: 8, name: "A Person" };
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), "http://localhost");
+    if (url.pathname.endsWith("/credits")) {
+      return Response.json({ items: [{ ...title, id: 43, name: "Another title", characters: [] }] });
+    }
+    if (url.pathname.endsWith("/people/8")) return Response.json(person);
+    return Response.json({ ...title, media_type: mediaType, [field]: [person] });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const onOpenTitle = vi.fn();
+  render(<TitleDetails selection={{ media_type: mediaType, id: title.id }} token={null}
+    onClose={vi.fn()} onOpenTitle={onOpenTitle} />);
+  fireEvent.click(await screen.findByRole("button", { name: person.name }));
+  await screen.findByRole("dialog", { name: `${person.name} ${label}` });
+  const credits = await screen.findAllByRole("button", { name: /Another title/ });
+  expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith(`/people/8/credits?role=${role}`))).toBe(true);
+  fireEvent.click(credits[0]);
+  expect(onOpenTitle).toHaveBeenCalledWith("tv", 43);
+});
+
 it("opens an actor's other credits and navigates to a credited title", async () => {
   const actor = { id: 7, name: "Adam Scott", profile_path: null, characters: ["Mark Scout"] };
   const movie = { ...title, media_type: "movie", name: "A movie", characters: ["Alex"] };

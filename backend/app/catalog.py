@@ -195,21 +195,25 @@ def person_details(person_id: int) -> dict:
 
 
 @router.get("/people/{person_id}/credits")
-def person_credits(person_id: int) -> dict:
+def person_credits(person_id: int, role: Literal["acting", "creator", "director"] = "acting") -> dict:
     if person_id <= 0:
         raise APIError(422, "invalid_person", "Person IDs must be positive.")
     data = tmdb_get(f"/person/{person_id}/combined_credits")
     titles = {}
-    for credit in data.get("cast") or []:
+    credits = data.get("cast" if role == "acting" else "crew") or []
+    crew_jobs = {"creator": {"Creator", "Created By"}, "director": {"Director"}}
+    for credit in credits:
         media_type = credit.get("media_type")
         if media_type not in ("movie", "tv") or credit.get("id") is None or credit.get("adult"):
+            continue
+        if role != "acting" and credit.get("job") not in crew_jobs[role]:
             continue
         title = summarize(credit, media_type)
         if not title["name"]:
             continue
         key = (media_type, title["id"])
         entry = titles.setdefault(key, {**title, "characters": [], "popularity": credit.get("popularity") or 0})
-        character = credit.get("character")
+        character = credit.get("character") if role == "acting" else None
         if character and character not in entry["characters"]:
             entry["characters"].append(character)
     return {"items": sorted(titles.values(), key=lambda title: title["release_date"] or "", reverse=True)}

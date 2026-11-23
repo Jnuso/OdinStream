@@ -193,6 +193,18 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual([(item["name"], item["characters"]) for item in response.json()["items"]],
                          [("Show", []), ("Movie", ["Lead", "Double"])])
 
+    def test_person_crew_credits_filter_by_role(self):
+        show = {"id": 1, "media_type": "tv", "name": "Created show", "job": "Creator"}
+        movie = {"id": 1, "media_type": "movie", "title": "Directed movie", "job": "Director"}
+        data = {"cast": [{"id": 2, "media_type": "tv", "name": "Acted in"}],
+                "crew": [show, movie, movie, {**show, "id": 3, "job": "Executive Producer"}]}
+        with patch("app.catalog.tmdb_get", return_value=data):
+            for role, name in (("creator", "Created show"), ("director", "Directed movie")):
+                with self.subTest(role=role):
+                    response = self.client.get("/api/catalog/people/7/credits", params={"role": role})
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual([item["name"] for item in response.json()["items"]], [name])
+
     def test_actor_profile_returns_biography_and_optional_facts(self):
         with patch("app.catalog.tmdb_get", return_value={
             "id": 7, "name": "Actor", "biography": "A biography.", "birthday": "1973-04-03",

@@ -7,6 +7,12 @@ import Skeleton from "./Skeleton";
 
 type Credit = TitleSummary & { characters: string[]; popularity?: number };
 export type Actor = { id: number; name: string; profile_path?: string | null; characters?: string[] };
+export type CreditRole = "acting" | "creator" | "director";
+const creditLabels = {
+  acting: { credits: "acting credits", back: "cast" },
+  creator: { credits: "creator credits", back: "creators" },
+  director: { credits: "directing credits", back: "directors" },
+};
 type Profile = Actor & { biography: string | null; birthday: string | null; deathday: string | null; place_of_birth: string | null };
 const PAGE_SIZE = 12;
 
@@ -25,8 +31,9 @@ export function ActorPortrait({ actor, size = "w342" }: { actor: Actor; size?: "
   </span>;
 }
 
-export default function ActorCredits({ actor, currentTitle, token, onFavoriteChange, onClose, onOpenTitle }: {
+export default function ActorCredits({ actor, role = "acting", currentTitle, token, onFavoriteChange, onClose, onOpenTitle }: {
   actor: Actor;
+  role?: CreditRole;
   currentTitle?: { media_type: MediaType; id: number; name?: string };
   token?: string | null;
   onFavoriteChange?: () => void;
@@ -46,14 +53,16 @@ export default function ActorCredits({ actor, currentTitle, token, onFavoriteCha
   const [saving, setSaving] = useState(false);
   const [signInHint, setSignInHint] = useState(false);
   const favoritePath = `/api/me/favorite-people/${actor.id}`;
+  const labels = creditLabels[role];
+  const creditsPath = `/api/catalog/people/${actor.id}/credits${role === "acting" ? "" : `?role=${role}`}`;
 
   useEffect(() => {
     const request = new AbortController();
-    api<{ items: Credit[] }>(`/api/catalog/people/${actor.id}/credits`, undefined, { signal: request.signal })
+    api<{ items: Credit[] }>(creditsPath, undefined, { signal: request.signal })
       .then(data => { if (!request.signal.aborted) setCredits(data.items); })
       .catch(() => { if (!request.signal.aborted) setError(true); });
     return () => request.abort();
-  }, [actor.id, retry]);
+  }, [creditsPath, retry]);
 
   useEffect(() => {
     const request = new AbortController();
@@ -105,8 +114,8 @@ export default function ActorCredits({ actor, currentTitle, token, onFavoriteCha
   const open = (credit: Credit) => { onClose(); onOpenTitle(credit.media_type, credit.id); };
 
   return (
-    <Modal label={`${actor.name} acting credits`} className="title-dialog actor-credits" onClose={onClose}>
-      {currentTitle && <button className="actor-back secondary" onClick={onClose}>‹ Back to cast</button>}
+    <Modal label={`${actor.name} ${labels.credits}`} className="title-dialog actor-credits" onClose={onClose}>
+      {currentTitle && <button className="actor-back secondary" onClick={onClose}>‹ Back to {labels.back}</button>}
       <div className="actor-profile">
         <ActorPortrait actor={{ ...actor, profile_path: profile?.profile_path || actor.profile_path }} />
         <div className="actor-overview">
@@ -121,7 +130,7 @@ export default function ActorCredits({ actor, currentTitle, token, onFavoriteCha
           {currentTitle?.name && !!actor.characters?.length &&
             <p className="actor-role">Plays {actor.characters.join(", ")} in <em>{currentTitle.name}</em></p>}
           {facts.length > 0 && <p className="muted">{facts.join(" · ")}</p>}
-          {signInHint && !token && <p role="status">Sign in to save favorite actors.</p>}
+          {signInHint && !token && <p role="status">Sign in to save favorite people.</p>}
           {currentError && <p className="form-error" role="alert">{currentError} {isFavorite === undefined &&
             <button className="secondary" onClick={() => { setFavoriteError(null); setFavoriteRetry(value => value + 1); }}>Retry</button>}</p>}
           {biography && <p className="actor-bio">{expanded || biography.length <= 300 ? biography : `${biography.slice(0, 300).trimEnd()}…`}
@@ -140,17 +149,17 @@ export default function ActorCredits({ actor, currentTitle, token, onFavoriteCha
           </section>}
         </div>
       </div>
-      <h3 className="actor-filmography-title">Filmography</h3>
+      <h3 className="actor-filmography-title">{role === "acting" ? "Filmography" : role === "creator" ? "Created by" : "Directed by"}</h3>
       {error ? (
         <>
-          <p className="form-error" role="alert">Couldn’t load acting credits.</p>
+          <p className="form-error" role="alert">Couldn’t load {labels.credits}.</p>
           <button className="secondary" onClick={() => { setError(false); setRetry(value => value + 1); }}>Try again</button>
         </>
-      ) : !filtered ? <Skeleton label="Loading acting credits…" variant="rows" count={3} />
-        : otherCredits?.length === 0 ? <p className="muted">No other acting credits available.</p>
+      ) : !filtered ? <Skeleton label={`Loading ${labels.credits}…`} variant="rows" count={3} />
+        : otherCredits?.length === 0 ? <p className="muted">No other {labels.credits} available.</p>
         : (
           <>
-            <div className="actor-filters" role="group" aria-label="Filter acting credits">
+            <div className="actor-filters" role="group" aria-label={`Filter ${labels.credits}`}>
               {([["all", "All"], ["movie", "Movies"], ["tv", "TV"]] as const).map(([value, label]) =>
                 <button key={value} className="secondary" aria-pressed={filter === value}
                   onClick={() => { setFilter(value); setVisibleCount(PAGE_SIZE); }}>{label}</button>)}

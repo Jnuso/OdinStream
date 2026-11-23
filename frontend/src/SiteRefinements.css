@@ -97,6 +97,7 @@ button.title-cast-card:hover, button.title-cast-card:focus-visible { background:
 .discover-seasons .title-cast h4 { margin: 0 0 8px; }
 .discover-seasons .title-cast-list { grid-template-columns: repeat(auto-fill, minmax(84px, 100px)); }
 .discover-seasons .title-cast-list li { margin: 0; }
+.discover-seasons .title-cast-card { margin: 0; }
 .actor-back { margin-bottom: 20px; }
 .actor-profile { display: grid; grid-template-columns: minmax(0, 27%) minmax(0, 1fr); align-items: start; gap: clamp(16px, 3vw, 36px); }
 .actor-profile > .title-cast-photo { border-radius: 12px; }

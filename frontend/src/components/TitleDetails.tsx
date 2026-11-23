@@ -3,7 +3,7 @@ import Modal from "./Modal";
 import Poster from "./Poster";
 import PostCard from "./PostCard";
 import Skeleton from "./Skeleton";
-import ActorCredits, { ActorPortrait, type Actor } from "./ActorCredits";
+import ActorCredits, { ActorPortrait, type Actor, type CreditRole } from "./ActorCredits";
 import { api } from "../data/api";
 import { formatYear, type MediaType, type Post, type TitleSummary } from "../data/social";
 
@@ -30,16 +30,20 @@ type Episode = { episode_number: number; name: string; overview: string; air_dat
 type SavedTitle = { media_type: MediaType; tmdb_id: number; status: string };
 type LibraryCheck = { token: string; mediaType: MediaType; id: number; status: string | null; error?: string };
 
-function PeopleCredits({ people, label, Heading = "h3" }: { people?: Actor[]; label: string; Heading?: "h3" | "h4" }) {
+function PeopleCredits({ people, label, onSelect, Heading = "h3" }: {
+  people?: Actor[]; label: string; onSelect: (person: Actor) => void; Heading?: "h3" | "h4";
+}) {
   if (!people?.length) return null;
   return (
     <section className="title-cast">
       <Heading>{label}</Heading>
       <ul className="title-cast-list">
         {people.map(person => (
-          <li key={person.id} className="title-cast-card">
-            <ActorPortrait actor={person} size="w185" />
-            <strong>{person.name}</strong>
+          <li key={person.id}>
+            <button className="title-cast-card" onClick={() => onSelect(person)}>
+              <ActorPortrait actor={person} size="w185" />
+              <strong>{person.name}</strong>
+            </button>
           </li>
         ))}
       </ul>
@@ -67,7 +71,8 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
   const [libraryCheck, setLibraryCheck] = useState<LibraryCheck | null>(null);
   const [libraryRetry, setLibraryRetry] = useState(0);
   const [visibleCastCount, setVisibleCastCount] = useState(CAST_PAGE_SIZE);
-  const [selectedActor, setSelectedActor] = useState<NonNullable<Details["cast"]>[number] | null>(null);
+  const [selectedPerson, setSelectedPerson] = useState<{ person: Actor; role: CreditRole } | null>(null);
+  const openDirector = (person: Actor) => setSelectedPerson({ person, role: "director" });
   const cast = detail?.cast ?? [];
   const detailRequest = useRef(0);
   const seasonRequest = useRef(0);
@@ -240,7 +245,7 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
                         <strong>{episode.name || `Episode ${episode.episode_number}`}</strong>
                         {episode.air_date && ` · ${episode.air_date}`}
                         {episode.overview && <p>{episode.overview}</p>}
-                        <PeopleCredits people={episode.directors} label="Directed by" Heading="h4" />
+                        <PeopleCredits people={episode.directors} label="Directed by" Heading="h4" onSelect={openDirector} />
                       </li>
                     ))}
                   </ol>
@@ -250,8 +255,8 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
             </section>
           )}
           {detail.media_type === "tv"
-            ? <PeopleCredits people={detail.creators} label="Created by" />
-            : <PeopleCredits people={detail.directors} label="Directed by" />}
+            ? <PeopleCredits people={detail.creators} label="Created by" onSelect={person => setSelectedPerson({ person, role: "creator" })} />
+            : <PeopleCredits people={detail.directors} label="Directed by" onSelect={openDirector} />}
           {(detail.media_type === "tv" || cast.length > 0) && (
             <section className="title-cast">
               <h3>Cast</h3>
@@ -259,7 +264,7 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
                 <ul className="title-cast-list">
                   {cast.slice(0, visibleCastCount).map(actor => (
                     <li key={actor.id}>
-                      <button className="title-cast-card" onClick={() => setSelectedActor(actor)}>
+                      <button className="title-cast-card" onClick={() => setSelectedPerson({ person: actor, role: "acting" })}>
                         <ActorPortrait actor={actor} size="w185" />
                         <strong>{actor.name}</strong>
                         {actor.characters.length > 0 && <span className="muted">{actor.characters.join(", ")}</span>}
@@ -277,10 +282,11 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
           )}
       </>}
   </Modal>
-    {selectedActor && (
-      <ActorCredits key={selectedActor.id} actor={selectedActor} currentTitle={{ ...selection, name: detail?.name }}
+    {selectedPerson && (
+      <ActorCredits key={`${selectedPerson.role}:${selectedPerson.person.id}`} actor={selectedPerson.person}
+        role={selectedPerson.role} currentTitle={{ ...selection, name: detail?.name }}
         token={token} onFavoriteChange={onFavoriteChange}
-        onClose={() => setSelectedActor(null)} onOpenTitle={onOpenTitle} />
+        onClose={() => setSelectedPerson(null)} onOpenTitle={onOpenTitle} />
     )}
   </>;
 }
