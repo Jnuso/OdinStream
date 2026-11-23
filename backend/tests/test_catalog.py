@@ -33,6 +33,25 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual([(x["media_type"], x["name"]) for x in response.json()["items"]], [("movie", "A"), ("tv", "B")])
 
+    def test_streaming_services_merge_movie_and_tv_using_us_priority(self):
+        movie = {"results": [
+            {"provider_id": 8, "provider_name": "Netflix", "display_priority": 20,
+             "display_priorities": {"US": 1}},
+            {"provider_id": 1899, "provider_name": "HBO Max", "display_priority": 8},
+        ]}
+        tv = {"results": [
+            {"provider_id": 384, "provider_name": "HBO Max", "display_priority": 3},
+            {"provider_id": 386, "provider_name": "Peacock Premium", "display_priority": 2},
+        ]}
+        with patch("app.catalog.tmdb_get", side_effect=[movie, tv]) as fetch:
+            response = self.client.get("/api/catalog/streaming-services")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"items": ["Netflix", "Peacock Premium", "Max"]})
+        self.assertEqual([call.args for call in fetch.call_args_list], [
+            ("/watch/providers/movie", {"watch_region": "US"}),
+            ("/watch/providers/tv", {"watch_region": "US"}),
+        ])
+
     def test_trending_excludes_people_and_adult_titles(self):
         movies = [
             {"id": index, "media_type": "movie", "title": f"Movie {index}", "backdrop_path": "/wide.jpg"}

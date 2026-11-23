@@ -4,6 +4,7 @@ import { supabase } from "../data/auth";
 import { api } from "../data/api";
 import Skeleton from "./Skeleton";
 import FavoritesPicker from "./FavoritesPicker";
+import StreamingServicePicker from "./StreamingServicePicker";
 import { favoriteKey, type Favorite } from "../data/favorites";
 import { preferenceOptions, type createPreferencesCache, type Preferences } from "../data/preferencesCache";
 
@@ -109,10 +110,15 @@ function AccountPreferences({ token, cache }: { token: string; cache?: ReturnTyp
   if (preferences) content = (
       <form onSubmit={save}>
         {!preferences.favorite_genres.length && !preferences.streaming_services.length && <p>Choose favorites to personalize your account, or leave them empty for now.</p>}
-        {([ ["favorite_genres", "Favorite genres"], ["streaming_services", "Streaming services"] ] as const).map(([key, label]) =>
-          <fieldset key={key} disabled={saving}><legend>{label}</legend>
-            {preferenceOptions[key].map(option => <label className="service-check" key={option}><input type="checkbox" checked={preferences[key].includes(option)} onChange={() => toggle(key, option)} />{option}</label>)}
-          </fieldset>)}
+        <fieldset disabled={saving}><legend>Favorite genres</legend>
+          {preferenceOptions.favorite_genres.map(option => <label className="service-check" key={option}>
+            <input type="checkbox" checked={preferences.favorite_genres.includes(option)}
+              onChange={() => toggle("favorite_genres", option)} />{option}
+          </label>)}
+        </fieldset>
+        <fieldset disabled={saving}><legend>Streaming services</legend>
+          <StreamingServicePicker selected={preferences.streaming_services} onToggle={name => toggle("streaming_services", name)} />
+        </fieldset>
         <p className="muted">Availability is limited to the United States.</p>
         <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save preferences"}</button>
         {message && <p role="status">{message}</p>}

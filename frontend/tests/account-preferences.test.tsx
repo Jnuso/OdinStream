@@ -16,22 +16,24 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 it("opens with preloaded preferences and caches the server-confirmed save", async () => {
   const initial = { favorite_genres: ["Drama"], streaming_services: [] };
   const updated = { favorite_genres: ["Drama", "Comedy"], streaming_services: [] };
-  const fetchMock = vi.fn()
+  const preferencesFetch = vi.fn()
     .mockResolvedValueOnce(response(initial))
     .mockResolvedValueOnce(response(updated));
-  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("fetch", (input: RequestInfo | URL) => String(input).endsWith("/streaming-services")
+    ? Promise.resolve(response({}, 503))
+    : preferencesFetch());
   const preferencesCache = createPreferencesCache("a");
   await preferencesCache.load();
   const view = render(<Account {...props} session={session("a")} preferencesCache={preferencesCache} />);
   expect((screen.getByRole("checkbox", { name: "Drama" }) as HTMLInputElement).checked).toBe(true);
-  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(preferencesFetch).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole("checkbox", { name: "Comedy" }));
   fireEvent.click(screen.getByRole("button", { name: "Save preferences" }));
   await screen.findByText("Preferences saved.");
   view.unmount();
   render(<Account {...props} session={session("a")} preferencesCache={preferencesCache} />);
   expect((screen.getByRole("checkbox", { name: "Comedy" }) as HTMLInputElement).checked).toBe(true);
-  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(preferencesFetch).toHaveBeenCalledTimes(2);
 });
 
 it("loads, saves, and reloads preferences separately for each account", async () => {
@@ -110,4 +112,26 @@ it("requires explicit confirmation and password before deleting an account", asy
   fireEvent.click(deleteButton);
   await waitFor(() => expect(deleted).toHaveBeenCalledOnce());
   expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE" && init.body === JSON.stringify({ password: "password" }))).toBe(true);
+});
+
+it("expands the ranked services and saves a selection from the full list", async () => {
+  const items = ["Netflix", "Max", "Hulu", "Disney+", "Prime Video", "Apple TV+", "Peacock", "Paramount+", "Crunchyroll"];
+  const initial = { favorite_genres: [], streaming_services: [] };
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).endsWith("/streaming-services")) return response({ items });
+    return response(init?.body ? JSON.parse(String(init.body)) : initial);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  render(<Account {...props} session={session("a")} />);
+  const expand = await screen.findByRole("button", { name: "See more services" });
+  expect(screen.queryByRole("checkbox", { name: "Crunchyroll" })).toBeNull();
+  fireEvent.click(expand);
+  fireEvent.click(screen.getByRole("checkbox", { name: "Crunchyroll" }));
+  fireEvent.click(screen.getByRole("button", { name: "See fewer services" }));
+  expect((screen.getByRole("checkbox", { name: "Crunchyroll" }) as HTMLInputElement).checked).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+  await screen.findByText("Preferences saved.");
+  expect(fetchMock.mock.calls.find(([, init]) => init?.method === "PUT")?.[1]?.body).toBe(
+    JSON.stringify({ ...initial, streaming_services: ["Crunchyroll"] }),
+  );
 });

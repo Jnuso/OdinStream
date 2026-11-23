@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, ApiError } from "../data/api";
 import AccountLayout from "./AccountLayout";
 import FavoritesPicker from "./FavoritesPicker";
+import StreamingServicePicker from "./StreamingServicePicker";
 import { favoriteKey, type Favorite } from "../data/favorites";
 import { preferenceOptions } from "../data/preferencesCache";
 
@@ -124,10 +125,9 @@ export default function Setup({ token, onComplete, onSignOut }: {
         selected={favorites.filter(item => Boolean(item.media_type) === (step === 4))} disabled={busy}
         onAdd={item => setFavorites(previous => previous.some(pick => favoriteKey(pick) === favoriteKey(item)) ? previous : [...previous, item])}
         onRemove={item => setFavorites(previous => previous.filter(pick => favoriteKey(pick) !== favoriteKey(item)))} />}
-      {step === 2 && <fieldset aria-label="Streaming services">
-        <div className="setup-choices">{preferenceOptions.streaming_services.map(item => <label className="setup-choice" key={item}>
-          <input type="checkbox" checked={streamingServices.includes(item)} onChange={() => toggle(item, streamingServices, setStreamingServices)} />{item}
-        </label>)}</div>
+      {step === 2 && <fieldset aria-label="Streaming services" disabled={busy}>
+        <StreamingServicePicker setup selected={streamingServices}
+          onToggle={name => toggle(name, streamingServices, setStreamingServices)} />
       </fieldset>}
       {step === 3 && <fieldset aria-label="Favorite genres">
         <div className="setup-choices">{preferenceOptions.favorite_genres.map(item => <label className="setup-choice" key={item}>

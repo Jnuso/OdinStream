@@ -237,6 +237,8 @@ button.title-cast-card:hover, button.title-cast-card:focus-visible { background:
 .account-preferences legend { font-size: 14px; font-weight: 600; margin: 0 0 14px; }
 .account-preferences .service-check { display: inline-flex; gap: 8px; margin: 0; padding: 10px 12px; border: 1px solid #ffffff1c; border-radius: 8px; font-size: 13px; cursor: pointer; }
 .account-preferences .service-check:has(input:checked) { background: #d5eaa20b; border-color: #d5eaa260; }
+.streaming-service-options { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; }
+.streaming-service-action { margin-top: 10px; }
 .account-preferences input { width: 16px; height: 16px; margin: 0; }
 .account-danger { max-width: none; margin-top: 24px; padding: 28px; border: 1px solid #a34a4a66; background: #291919; border-radius: 12px; }
 .account-danger h2 { margin-bottom: 12px; }

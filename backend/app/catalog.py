@@ -123,6 +123,42 @@ def summarize(item: dict, media_type: str) -> dict:
     }
 
 
+def streaming_providers() -> list[dict]:
+    """Merge the US movie and TV provider lists using each service's best TMDB rank."""
+    legacy_names = {provider_id: name for name, ids in SERVICE_IDS.items() for provider_id in ids}
+    providers: dict[str, dict] = {}
+    for media_type in ("movie", "tv"):
+        data = tmdb_get(f"/watch/providers/{media_type}", {"watch_region": "US"})
+        for item in data.get("results", []):
+            if not isinstance(item, dict):
+                continue
+            provider_id = item.get("provider_id")
+            if not isinstance(provider_id, int):
+                continue
+            name = legacy_names.get(provider_id) or str(item.get("provider_name") or "").strip()
+            if not name:
+                continue
+            rank = (item.get("display_priorities") or {}).get("US", item.get("display_priority"))
+            rank = rank if isinstance(rank, int) and rank >= 0 else float("inf")
+            provider = providers.setdefault(name, {"name": name, "ids": set(), "rank": rank})
+            provider["ids"].add(provider_id)
+            provider["rank"] = min(provider["rank"], rank)
+    return sorted(providers.values(), key=lambda item: (item["rank"], item["name"].casefold()))
+
+
+def streaming_provider_ids(selected: list[str]) -> set[int]:
+    ids = {provider_id for name in selected for provider_id in SERVICE_IDS.get(name, ())}
+    if any(name not in SERVICE_IDS for name in selected):
+        ids.update(provider_id for item in streaming_providers() if item["name"] in selected
+                   for provider_id in item["ids"])
+    return ids
+
+
+@router.get("/streaming-services")
+def list_streaming_services() -> dict:
+    return {"items": [provider["name"] for provider in streaming_providers()]}
+
+
 @router.get("/trending")
 def trending() -> dict:
     data = tmdb_get("/trending/all/week")
@@ -161,6 +197,9 @@ def search_available(query: str = Query(min_length=1, max_length=200), page: int
     selected = preferences.get(user.id)["streaming_services"]
     if not selected:
         raise APIError(422, "no_streaming_services", "Choose streaming services in Account before filtering.")
+    selected_ids = streaming_provider_ids(selected)
+    selected_names = {name.casefold() for name in selected}
+    selected_names.update(alias for service in selected for alias in SERVICE_NAMES.get(service, ()))
     data = search(query, page, media_type)
 
     def available(item: dict) -> bool:
@@ -171,7 +210,7 @@ def search_available(query: str = Query(min_length=1, max_length=200), page: int
                 continue
             provider_id = provider.get("provider_id")
             name = str(provider.get("provider_name") or "").casefold().strip()
-            if any(provider_id in SERVICE_IDS.get(service, set()) or name in SERVICE_NAMES.get(service, set()) for service in selected):
+            if provider_id in selected_ids or name in selected_names:
                 return True
         return False
 

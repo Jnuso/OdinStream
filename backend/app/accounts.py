@@ -1,6 +1,7 @@
 """Signed-in account identity and preferences."""
 
 import logging
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated, Any, Literal
@@ -82,12 +83,22 @@ def update_preferences(
     if not isinstance(body, dict):
         raise APIError(422, "invalid_preferences", "Preferences must be an object.")
     genres = normalize_choices(body.get("favorite_genres"), FAVORITE_GENRES, "Favorite genres")
-    services = normalize_choices(
-        body.get("streaming_services"),
-        STREAMING_SERVICES,
-        "Streaming services",
-    )
+    services = normalize_streaming_services(body.get("streaming_services"), user, store)
     return store.save(user.id, genres, services)
+
+
+def normalize_streaming_services(
+    values: object, user: AuthenticatedUser | None = None, store: PreferenceStore | None = None,
+) -> list[str]:
+    allowed = STREAMING_SERVICES
+    if isinstance(values, list) and any(isinstance(name, str) and name not in allowed for name in values):
+        from app.catalog import streaming_providers
+
+        if store is not None and user is not None:
+            allowed += tuple(store.get(user.id)["streaming_services"])
+        if os.environ.get("TMDB_READ_ACCESS_TOKEN", "").strip() and any(name not in allowed for name in values):
+            allowed += tuple(item["name"] for item in streaming_providers())
+    return normalize_choices(values, allowed, "Streaming services")
 
 
 FavoriteId = Annotated[int, Field(strict=True, gt=0, le=2147483647)]
@@ -141,7 +152,7 @@ def complete_setup(
     if not re.fullmatch(r"[A-Za-z0-9_.]{3,30}", username):
         raise APIError(422, "invalid_username", "Usernames use 3-30 letters, numbers, dots or underscores.")
     genres = normalize_choices(body.favorite_genres, FAVORITE_GENRES, "Favorite genres")
-    services = normalize_choices(body.streaming_services, STREAMING_SERVICES, "Streaming services")
+    services = normalize_streaming_services(body.streaming_services)
     if not settings.database_url:
         raise APIError(503, "account_unavailable", "Account setup is not configured.")
     from app.favorite_people import insert_person

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.accounts import current_user, preference_store
 from app.auth import AuthenticatedUser
-from app.catalog import SERVICE_IDS, summarize, tmdb_get
+from app.catalog import streaming_provider_ids, summarize, tmdb_get
 from app.errors import APIError
 from app.favorite_people import Config, favorite_connection
 from app.library import PostgresLibraryStore, library_store
@@ -131,7 +131,7 @@ def read_recommendations(settings: Config, limit: int = Query(default=12, ge=1, 
     genres = choices["favorite_genres"]
     providers = ""
     if streaming_only:
-        provider_ids = {provider for service in choices["streaming_services"] for provider in SERVICE_IDS.get(service, set())}
+        provider_ids = streaming_provider_ids(choices["streaming_services"])
         if not provider_ids:
             raise APIError(422, "no_streaming_services", "Choose streaming services in Account before filtering.")
         providers = "|".join(map(str, sorted(provider_ids)))

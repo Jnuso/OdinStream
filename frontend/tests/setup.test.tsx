@@ -29,7 +29,7 @@ describe("account setup", () => {
     expect(screen.queryByLabelText("Comedy")).toBeNull();
     next();
     expect(screen.getByRole("heading", { name: "Your favorite genres" })).toBeTruthy();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.some(([, options]) => options.method === "PUT")).toBe(false);
     fireEvent.click(screen.getByLabelText(/Comedy/));
     next();
     expect(screen.getByRole("heading", { name: "Your favorite movies and shows" })).toBeTruthy();
@@ -37,7 +37,8 @@ describe("account setup", () => {
     expect(screen.getByRole("heading", { name: "Your favorite actors and directors" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
     await waitFor(() => expect(complete).toHaveBeenCalledOnce());
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({
+    const save = fetchMock.mock.calls.find(([, options]) => options.method === "PUT");
+    expect(JSON.parse(save?.[1].body as string)).toEqual({
       username: "Jack", visibility: "private", favorite_genres: ["Comedy"], streaming_services: ["Netflix"],
       favorite_titles: [], favorite_people: [],
     });
