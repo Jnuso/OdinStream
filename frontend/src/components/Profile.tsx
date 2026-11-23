@@ -12,6 +12,7 @@ import {
 import PostList from "./PostList";
 import { api } from "../data/api";
 import Modal from "./Modal";
+import ProfileConnections, { type ConnectionDirection } from "./ProfileConnections";
 import "./Profile.css";
 import Skeleton from "./Skeleton";
 import type { createPageCache } from "../data/pageCache";
@@ -58,6 +59,9 @@ export default function Profile({
   const [attempt, setAttempt] = useState(0);
   const [followBusy, setFollowBusy] = useState(false);
   const [editingTarget, setEditingTarget] = useState<string | null>(null);
+  const [connections, setConnections] = useState<{
+    token: string; target: string; direction: ConnectionDirection;
+  } | null>(null);
   const [picture, setPicture] = useState<{ target: string; url: string } | null>(null);
 
   useEffect(() => {
@@ -121,6 +125,7 @@ export default function Profile({
   }
   if (!profile || posts === null || loadedFor?.token !== token || loadedFor.target !== target) return <><Skeleton label="Loading profile…" variant="profile" /><Skeleton label="Loading reviews…" variant="posts" count={2} /></>;
   const canViewPosts = canReadPosts(profile, viewerId);
+  const canViewConnections = isSelf || profile.visibility === "public";
 
   return (
     <div className="profile-page">
@@ -143,12 +148,17 @@ export default function Profile({
             <span>
               <strong>{profile.post_count}</strong> Posts
             </span>
-            <span>
-              <strong>{profile.follower_count}</strong> Followers
-            </span>
-            <span>
-              <strong>{profile.following_count}</strong> Following
-            </span>
+            {(["followers", "following"] as const).map((direction) => {
+              const stat = direction === "followers"
+                ? <><strong>{profile.follower_count}</strong> Followers</>
+                : <><strong>{profile.following_count}</strong> Following</>;
+              return canViewConnections ? (
+                <button key={direction} type="button" aria-haspopup="dialog"
+                  onClick={() => setConnections({ token, target, direction })}>
+                  {stat}
+                </button>
+              ) : <span key={direction}>{stat}</span>;
+            })}
           </div>}
         {!isSelf && (
           <button
@@ -161,6 +171,18 @@ export default function Profile({
         )}
       </section>
       {isSelf && followRequests}
+      {canViewConnections && connections?.target === target && connections.token === token && (
+        <ProfileConnections
+          token={token}
+          profileId={target}
+          direction={connections.direction}
+          onClose={() => setConnections(null)}
+          onOpenProfile={(id) => {
+            setConnections(null);
+            onOpenProfile(id);
+          }}
+        />
+      )}
       {isSelf && editingTarget === target && (
         <Modal label="Edit profile" onClose={() => setEditingTarget(null)}>
         <ProfileSettings

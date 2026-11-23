@@ -8,8 +8,14 @@
 .profile-page .profile-identity > p { color: #bac4ad; font-size: 14px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 48ch; margin-top: 10px; }
 .profile-page .profile-identity .eyebrow { overflow-wrap: anywhere; }
 .profile-page .profile-stats { display: flex; gap: 24px; margin: 0; flex-shrink: 0; }
-.profile-page .profile-stats > span { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; }
+.profile-page .profile-stats > :is(span, button) { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; }
+.profile-page .profile-stats > button { padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.profile-page .profile-stats > button:is(:hover, :focus-visible) { text-decoration: underline; }
 .profile-page .profile-stats strong { margin: 0; font-size: 21px; }
+.profile-connections-list { list-style: none; margin: 16px 0; padding: 0; }
+.profile-connections-list li { padding: 10px 0; border-bottom: 1px solid #ffffff12; }
+.profile-connections-list .author-link { text-align: left; overflow-wrap: anywhere; }
+.profile-connections-list small { display: block; color: var(--muted); }
 .profile-page .social-layout { display: block; }
 .profile-page .feed-column { min-width: 0; width: 100%; }
 .profile-page .section-heading { margin-bottom: 20px; }

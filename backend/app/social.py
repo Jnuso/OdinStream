@@ -237,6 +237,34 @@ class PostgresSocialStore:
             raise APIError(404, "profile_not_found", "Profile not found.")
         return shape_profile(row)
 
+    def connections(self, user_id: str, profile_id: str, direction: Literal["followers", "following"],
+                    limit: int, offset: int) -> list[dict]:
+        target_column, account_column = (
+            ("followee_id", "follower_id") if direction == "followers" else ("follower_id", "followee_id")
+        )
+        rows = self._run(user_id, f"""
+            select target.visibility = 'public' or target.user_id = %s as allowed,
+                   account.user_id::text as user_id, account.display_name, account.handle
+            from public.profiles target
+            left join lateral (
+                select p.user_id, p.display_name, p.handle, f.created_at
+                from public.follows f
+                join public.profiles p on p.user_id = f.{account_column}
+                where f.{target_column} = target.user_id and f.status = 'following'
+                  and (target.visibility = 'public' or target.user_id = %s)
+                order by f.created_at desc, p.user_id
+                limit %s offset %s
+            ) account on true
+            where target.user_id = %s
+            order by account.created_at desc, account.user_id""",
+            (user_id, user_id, limit, offset, profile_id), many=True)
+        if not rows:
+            raise APIError(404, "profile_not_found", "Profile not found.")
+        if not rows[0]["allowed"]:
+            raise APIError(403, "profile_private", "This profile is private.")
+        return [{"user_id": row["user_id"], "display_name": row["display_name"], "handle": row["handle"]}
+                for row in rows if row["user_id"] is not None]
+
     def follow(self, user_id: str, profile_id: str) -> None:
         # Atomically verify profile existence and visibility in one statement to avoid TOCTOU races.
         row = self._run(
@@ -361,6 +389,15 @@ def read_profile_posts(profile_id: UUID, limit: int = Query(default=30, ge=1, le
     if profile.get("visibility") == "private" and str(profile_id) != user.id and not profile["viewer_follows"]:
         raise APIError(403, "profile_private", "This profile is private.")
     rows = store.posts_by_author(user.id, str(profile_id), limit + 1, offset)
+    return {"items": rows[:limit], "next_offset": offset + limit if len(rows) > limit else None}
+
+
+@router.get("/profiles/{profile_id}/connections/{direction}")
+def read_profile_connections(profile_id: UUID, direction: Literal["followers", "following"],
+                             limit: int = Query(default=30, ge=1, le=50), offset: int = Query(default=0, ge=0),
+                             user: AuthenticatedUser = Depends(current_user),
+                             store: PostgresSocialStore = Depends(social_store)) -> dict:
+    rows = store.connections(user.id, str(profile_id), direction, limit + 1, offset)
     return {"items": rows[:limit], "next_offset": offset + limit if len(rows) > limit else None}
 
 
