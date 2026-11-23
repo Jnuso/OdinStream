@@ -27,6 +27,7 @@ export default function Discover({
   reloadKey = 0,
   onOpenTitle,
   onOpenAccount,
+  onReady,
 }: {
   token: string | null;
   focus?: { media_type: MediaType; id: number } | null;
@@ -38,6 +39,7 @@ export default function Discover({
   reloadKey?: number;
   onOpenTitle?: (type: MediaType, id: number) => void;
   onOpenAccount?: () => void;
+  onReady?: (token: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [serviceFilter, setServiceFilter] = useState(false);
@@ -54,6 +56,10 @@ export default function Discover({
   const [services, setServices] = useState<{ token: string; names: string[] } | null>(null);
   const showServices = Boolean(onOpenAccount);
   const [trending, setTrending] = useState<TrendingTitle[]>([]);
+  const [trendingSettled, setTrendingSettled] = useState(false);
+  const [recommendationsToken, setRecommendationsToken] = useState<string | null>(null);
+  const [preferencesToken, setPreferencesToken] = useState<string | null>(null);
+  const [settledBackdrop, setSettledBackdrop] = useState<string | null>(null);
   const showTrending = Boolean(onOpenTitle);
   const searchRequest = useRef(0);
   const [localTitle, setLocalTitle] = useState<{ media_type: MediaType; id: number } | null>(null);
@@ -116,7 +122,8 @@ export default function Discover({
         setRecommended(data.items);
         setRecommendedBasis(data.basis);
       })
-      .catch((err) => active && setRecommendedError(err instanceof Error ? err.message : "Recommendations are unavailable."));
+      .catch((err) => active && setRecommendedError(err instanceof Error ? err.message : "Recommendations are unavailable."))
+      .finally(() => { if (active) setRecommendationsToken(token); });
     return () => {
       active = false;
     };
@@ -137,7 +144,8 @@ export default function Discover({
           setServices({ token, names: data.streaming_services });
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (active) setPreferencesToken(token); });
     return () => { active = false; };
   }, [token, showServices]);
 
@@ -146,11 +154,25 @@ export default function Discover({
     let active = true;
     cachedCatalog<{ items: TrendingTitle[] }>("/api/catalog/trending")
       .then(data => { if (active && Array.isArray(data.items)) setTrending(data.items); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (active) setTrendingSettled(true); });
     return () => { active = false; };
   }, [showTrending]);
 
   const featured = submittedQuery ? undefined : trending[0];
+  const backdrop = featured?.backdrop_path;
+
+  useEffect(() => {
+    if (!onReady || !token || submittedQuery || (showTrending && !trendingSettled)
+      || recommendationsToken !== token || (showServices && preferencesToken !== token)
+      || (backdrop && settledBackdrop !== backdrop)) return;
+    // Allow the committed Discover content to paint before starting other requests.
+    let afterPaint = 0;
+    const frame = requestAnimationFrame(() => {
+      afterPaint = requestAnimationFrame(() => onReady(token));
+    });
+    return () => { cancelAnimationFrame(frame); cancelAnimationFrame(afterPaint); };
+  }, [onReady, token, submittedQuery, showTrending, trendingSettled, recommendationsToken, showServices, preferencesToken, backdrop, settledBackdrop]);
 
   return (
     <section className="discover-page">
@@ -192,8 +214,9 @@ export default function Discover({
       </div>
       {featured && (
         <section className="discover-feature" aria-labelledby="discover-feature-title">
-          {featured.backdrop_path && (
-            <img className="discover-feature-art" src={`https://image.tmdb.org/t/p/w780${featured.backdrop_path}`} alt="" />
+          {backdrop && (
+            <img className="discover-feature-art" src={`https://image.tmdb.org/t/p/w780${backdrop}`} alt=""
+              onLoad={() => setSettledBackdrop(backdrop)} onError={() => setSettledBackdrop(backdrop)} />
           )}
           <div className="discover-feature-copy">
             <p className="discover-feature-label">Featured this week</p>

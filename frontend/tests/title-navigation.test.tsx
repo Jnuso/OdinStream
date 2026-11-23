@@ -21,6 +21,41 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); clearCatalogCache(); vi.unstubAllGlobals(); auth.changed = null; window.history.replaceState(null, "", "/"); });
 
+it("waits for Discover and lets Feed join its in-flight preload", async () => {
+  let resolveTrending!: (response: Response) => void;
+  let resolveLibrary!: (response: Response) => void;
+  let resolveFeed!: (response: Response) => void;
+  const trending = new Promise<Response>(resolve => { resolveTrending = resolve; });
+  const library = new Promise<Response>(resolve => { resolveLibrary = resolve; });
+  const feed = new Promise<Response>(resolve => { resolveFeed = resolve; });
+  const order: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = new URL(String(input), "http://localhost").pathname;
+    if (path === "/api/catalog/trending") return trending;
+    if (path === "/api/me/saved-titles") { order.push("library"); return library; }
+    if (path === "/api/feed") { order.push("feed"); return feed; }
+    if (path === `/api/profiles/${id}/posts`) order.push("profile");
+    if (path.endsWith("/setup")) return Response.json({ setup_complete: true });
+    if (path === "/api/me/profile") return Response.json(profile);
+    return Response.json({ items: [], streaming_services: [], next_offset: null });
+  }));
+  render(<App />);
+  await act(async () => auth.changed!("INITIAL_SESSION", { access_token: "token", user: { id } } as Session));
+  await screen.findByRole("heading", { name: "Discover" });
+  expect(order).toEqual([]);
+  await act(async () => resolveTrending(Response.json({ items: [{ ...title, backdrop_path: "/hero.jpg" }] })));
+  expect(order).toEqual([]);
+  fireEvent.load(document.querySelector(".discover-feature-art")!);
+  await waitFor(() => expect(order).toEqual(["library"]));
+  await act(async () => resolveLibrary(Response.json({ items: [] })));
+  await waitFor(() => expect(order).toEqual(["library", "feed"]));
+  fireEvent.click(screen.getAllByRole("button", { name: "Feed", exact: true })[0]);
+  await screen.findByRole("heading", { name: "Feed" });
+  await act(async () => resolveFeed(Response.json({ items: [post], next_offset: null })));
+  await screen.findByRole("button", { name: "Open Severance details" });
+  expect(order).toEqual(["library", "feed"]);
+});
+
 it.each(["library", "feed", "profile/me"])("opens title details over %s without changing tabs", async route => {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input), "http://localhost").pathname;

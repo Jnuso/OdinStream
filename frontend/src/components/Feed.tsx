@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { fetchFeed, type Post } from "../data/social";
 import PostList from "./PostList";
 import Skeleton from "./Skeleton";
+import type { createPageCache } from "../data/pageCache";
 
 export default function Feed({
   token,
@@ -13,6 +14,7 @@ export default function Feed({
   onEdit,
   onNewPost,
   reloadKey,
+  cache,
 }: {
   token: string;
   viewerId: string;
@@ -23,8 +25,12 @@ export default function Feed({
   onEdit: (post: Post) => void;
   onNewPost: () => void;
   reloadKey: number;
+  cache?: ReturnType<typeof createPageCache<Awaited<ReturnType<typeof fetchFeed>>>>;
 }) {
-  const [loaded, setLoaded] = useState<{ token: string; viewerId: string; scope: "public" | "following"; requestKey: string; items: Post[]; next_offset: number | null } | null>(null);
+  const [loaded, setLoaded] = useState<{ token: string; viewerId: string; scope: "public" | "following"; requestKey: string; items: Post[]; next_offset: number | null } | null>(() => {
+    const page = cache?.peek();
+    return page ? { ...page, token, viewerId, scope, requestKey: "" } : null;
+  });
   const generation = useRef(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
@@ -41,14 +47,14 @@ export default function Feed({
     generation.current += 1;
     setLoadingMore(false);
     setError("");
-    fetchFeed(token, scope)
+    (cache?.load() ?? fetchFeed(token, scope))
       .then((page) => { if (active) setLoaded({ ...page, token, viewerId, scope, requestKey }); })
       .catch((err) => active && setError(err instanceof Error ? err.message : "The feed could not be loaded."));
     return () => {
       active = false;
       generation.current += 1;
     };
-  }, [token, viewerId, scope, requestKey]);
+  }, [cache, token, viewerId, scope, requestKey]);
 
   async function loadMore() {
     if (nextOffset === null || pending || loadingMore) return;

@@ -4,7 +4,9 @@ import { authCallbackError, supabase } from "./data/auth";
 import { useNavigation, type Page } from "./data/navigation";
 import {
   avatarColor,
+  fetchFeed,
   fetchMyProfile,
+  fetchProfilePosts,
   fetchSuggestedProfiles,
   initials,
   setFollow,
@@ -31,6 +33,7 @@ import "./RetroVideoStore.css";
 import FollowRequests, { RequestBadge } from "./components/FollowRequests";
 import { useFollowRequests } from "./data/useFollowRequests";
 import { createLibraryCache } from "./data/libraryCache";
+import { createPageCache } from "./data/pageCache";
 
 type Focus = { media_type: MediaType; id: number };
 
@@ -65,19 +68,31 @@ export default function App() {
   const token = session?.access_token ?? null;
   const viewerId = session?.user.id ?? "";
   const libraryCache = useMemo(() => createLibraryCache(token), [token]);
+  const feedCache = useMemo(() => createPageCache(() => fetchFeed(token!, feed)), [token, feed, reloadKey]);
+  const ownProfile = useMemo(() => ({
+    summary: createPageCache(() => fetchMyProfile(token!)),
+    posts: createPageCache(() => fetchProfilePosts(token!, viewerId)),
+  }), [token, viewerId, reloadKey]);
   const [libraryVersion, setLibraryVersion] = useState(0);
-  const canPreloadLibrary = !!token && setup?.id === viewerId && setup.status === "ready" && !recovery;
+  const [discoverReadyToken, setDiscoverReadyToken] = useState<string | null>(null);
+  const canPreload = !!token && setup?.id === viewerId && setup.status === "ready" && !recovery;
   const viewingOwnProfile = page === "profile" && (profileId === "me" || profileId === viewerId);
 
   useEffect(() => {
-    if (!canPreloadLibrary || page !== "discover") return;
-    const timer = window.setTimeout(() => { void libraryCache.load().catch(() => {}); }, 1500);
-    return () => window.clearTimeout(timer);
-  }, [canPreloadLibrary, libraryCache, page]);
-
-  function preloadLibrary() {
-    if (canPreloadLibrary && page !== "library") void libraryCache.load().catch(() => {});
-  }
+    if (page !== "discover") {
+      setDiscoverReadyToken(null);
+      return;
+    }
+    if (!canPreload || discoverReadyToken !== token) return;
+    let active = true;
+    void (async () => {
+      for (const cache of [libraryCache, feedCache, ownProfile.posts]) {
+        if (!active) break;
+        await cache.load().catch(() => {});
+      }
+    })();
+    return () => { active = false; };
+  }, [canPreload, discoverReadyToken, feedCache, libraryCache, ownProfile, page, token]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -113,12 +128,12 @@ export default function App() {
       return;
     }
     let active = true;
-    fetchMyProfile(token).then((profile) => active && setMe(profile)).catch(() => active && setMe(null));
+    ownProfile.summary.load().then((profile) => active && setMe(profile)).catch(() => active && setMe(null));
     fetchSuggestedProfiles(token).then((items) => active && setSuggested(items)).catch(() => active && setSuggested([]));
     return () => {
       active = false;
     };
-  }, [token, reloadKey, setup, viewerId]);
+  }, [token, ownProfile, setup, viewerId]);
 
   useEffect(() => {
     if (!notice) return;
@@ -217,7 +232,7 @@ export default function App() {
           <button className={`nav-item ${page === "discover" ? "active" : ""}`} aria-current={page === "discover" ? "page" : undefined} onClick={() => setPage("discover")}>
             <NavIcon name="discover" />Discover
           </button>
-          <button className={`nav-item ${page === "library" ? "active" : ""}`} aria-current={page === "library" ? "page" : undefined} onPointerEnter={event => { if (event.pointerType === "mouse") preloadLibrary(); }} onFocus={preloadLibrary} onClick={() => setPage("library")}>
+          <button className={`nav-item ${page === "library" ? "active" : ""}`} aria-current={page === "library" ? "page" : undefined} onClick={() => setPage("library")}>
             <NavIcon name="library" />My Library
           </button>
           <button className={`nav-item ${page === "feed" ? "active" : ""}`} aria-current={page === "feed" ? "page" : undefined} onClick={() => setPage("feed")}>
@@ -256,7 +271,7 @@ export default function App() {
         </header>
         <main id="main" tabIndex={-1}>
           {page === "discover" ? (
-            <Discover token={token} onOpenTitle={openTitle} onOpenAccount={() => setPage("account")} />
+            <Discover token={token} onOpenTitle={openTitle} onOpenAccount={() => setPage("account")} onReady={setDiscoverReadyToken} />
           ) : page === "library" ? (
             <Library key={viewerId || "signed-out"} token={token} cache={libraryCache} version={libraryVersion} onOpenTitle={openTitle} />
           ) : page === "account" ? (
@@ -283,6 +298,7 @@ export default function App() {
                     </div>
                   </div>
                   <Feed
+                    cache={feedCache}
                     token={token}
                     viewerId={viewerId}
                     scope={feed}
@@ -324,6 +340,7 @@ export default function App() {
             )
           ) : token ? (
             <ProfileScreen
+              ownProfile={ownProfile}
               token={token}
               viewerId={viewerId}
               profileId={profileId}

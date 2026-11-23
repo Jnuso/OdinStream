@@ -14,6 +14,7 @@ import { api } from "../data/api";
 import Modal from "./Modal";
 import "./Profile.css";
 import Skeleton from "./Skeleton";
+import type { createPageCache } from "../data/pageCache";
 
 function canReadPosts(profile: ProfileData, viewerId: string) {
   return profile.can_view_posts ?? (profile.id === viewerId || profile.visibility === "public" || profile.viewer_follows);
@@ -30,6 +31,7 @@ export default function Profile({
   onChanged,
   onOpenAccount,
   followRequests,
+  ownProfile,
 }: {
   token: string;
   viewerId: string;
@@ -41,12 +43,17 @@ export default function Profile({
   onChanged: () => void;
   onOpenAccount: () => void;
   followRequests?: ReactNode;
+  ownProfile?: {
+    summary: ReturnType<typeof createPageCache<ProfileData>>;
+    posts: ReturnType<typeof createPageCache<Post[]>>;
+  };
 }) {
   const target = profileId === "me" ? viewerId : profileId;
   const isSelf = target === viewerId;
-  const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [posts, setPosts] = useState<Post[] | null>(null);
-  const [loadedFor, setLoadedFor] = useState<{ token: string; target: string } | null>(null);
+  const [profile, setProfile] = useState<ProfileData | null>(() => (isSelf && ownProfile?.summary.peek()) || null);
+  const [posts, setPosts] = useState<Post[] | null>(() => (isSelf && ownProfile?.posts.peek()) || null);
+  const [loadedFor, setLoadedFor] = useState<{ token: string; target: string } | null>(() =>
+    isSelf && ownProfile?.summary.peek() && ownProfile.posts.peek() ? { token, target } : null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [followBusy, setFollowBusy] = useState(false);
@@ -56,9 +63,14 @@ export default function Profile({
   useEffect(() => {
     let active = true;
     setError("");
-    fetchProfile(token, target)
-      .then(async data => {
+    const request = isSelf && ownProfile
+      ? Promise.all([ownProfile.summary.load(), ownProfile.posts.load()])
+      : fetchProfile(token, target).then(async data => {
         const items = canReadPosts(data, viewerId) ? await fetchProfilePosts(token, target) : [];
+        return [data, items] as const;
+      });
+    request
+      .then(([data, items]) => {
         if (!active) return;
         setProfile(data);
         setPosts(items);
@@ -68,7 +80,7 @@ export default function Profile({
     return () => {
       active = false;
     };
-  }, [token, viewerId, target, attempt, reloadKey]);
+  }, [token, viewerId, target, isSelf, ownProfile, attempt, reloadKey]);
 
   useEffect(() => {
     let active = true;
