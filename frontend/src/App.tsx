@@ -119,10 +119,17 @@ export default function App() {
   useEffect(() => {
     if (!token || !viewerId) { setSetup(null); return; }
     let active = true;
-    setSetup({ id: viewerId, status: "checking" });
+    setSetup(previous => previous?.id === viewerId && previous.status !== "error"
+      ? previous : { id: viewerId, status: "checking" });
     api<{ setup_complete: boolean }>("/api/me/setup", token)
-      .then(data => { if (active) setSetup({ id: viewerId, status: data.setup_complete ? "ready" : "needed" }); })
-      .catch(() => { if (active) setSetup({ id: viewerId, status: "error" }); });
+      .then(data => {
+        if (active) setSetup(previous => previous?.id === viewerId && previous.status === "ready"
+          ? previous : { id: viewerId, status: data.setup_complete ? "ready" : "needed" });
+      })
+      .catch(() => {
+        if (active) setSetup(previous => previous?.id === viewerId && previous.status !== "checking"
+          ? previous : { id: viewerId, status: "error" });
+      });
     return () => { active = false; };
   }, [token, viewerId, setupRetry]);
 
@@ -192,7 +199,10 @@ export default function App() {
     if (setup.status === "error") return <AccountStatus error
       onRetry={() => setSetupRetry(value => value + 1)}
       onSignOut={() => { void supabase?.auth.signOut(); }} />;
-    if (setup.status === "needed") return <Setup token={token} onComplete={() => setSetup({ id: viewerId, status: "ready" })}
+    if (setup.status === "needed") return <Setup key={viewerId} token={token} onComplete={() => {
+      setPage("discover");
+      setSetup({ id: viewerId, status: "ready" });
+    }}
       onSignOut={() => { void supabase?.auth.signOut(); }} />;
   }
 

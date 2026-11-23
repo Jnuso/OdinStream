@@ -109,6 +109,72 @@ class RecommendationTest(unittest.TestCase):
         self.assertEqual([(item["media_type"], item["id"]) for item in body["items"]], [("movie", 10)])
         self.assertIsNone(body["items"][0]["reason"])
 
+    def test_favorite_titles_infer_genres_and_rank_shared_interests(self):
+        titles = [
+            {"media_type": "movie", "tmdb_id": 1, "name": "First favorite", "genre_ids": [18]},
+            {"media_type": "movie", "tmdb_id": 4, "name": "Second favorite", "genre_ids": [35]},
+        ]
+
+        def results(path, params):
+            self.assertEqual(path, "/discover/movie")
+            ids = [1, 2, 3] if params["with_genres"] == 18 else [3]
+            items = discover_result(ids, "movie")["results"]
+            items[-1]["genre_ids"] = [18, 35]
+            return {"results": items}
+
+        app.dependency_overrides[preference_store] = lambda: FakePreferences([])
+        app.dependency_overrides[library_store] = lambda: FakeLibrary([])
+        with (patch("app.recommendations.favorite_signals", return_value=(titles, [])),
+              patch("app.recommendations.tmdb_get", side_effect=results)):
+            body = self.client.get("/api/me/recommendations", headers=self.headers()).json()
+        self.assertEqual(body["basis"], "favorites")
+        self.assertEqual([item["id"] for item in body["items"]], [3, 2])
+        self.assertEqual(body["items"][0]["reason"], "First favorite")
+
+    def test_people_signals_include_cast_and_directors_and_ignore_other_jobs(self):
+        people = [{"id": person_id, "name": "Favorite person"} for person_id in range(1, 8)]
+        credits = discover_result([1, 2, 3], "movie")["results"]
+        credits[1]["job"] = "Director"
+        credits[2]["job"] = "Producer"
+        calls = []
+
+        def results(path):
+            calls.append(path)
+            return {"cast": credits[:1], "crew": credits[1:]}
+
+        with patch("app.recommendations.favorite_signals", return_value=([], people)):
+            body = self.run_with([], [], results).json()
+        self.assertEqual(body["basis"], "favorites")
+        self.assertEqual([item["id"] for item in body["items"]], [1, 2])
+        self.assertEqual(body["items"][0]["reason"], "Favorite person")
+        self.assertEqual(set(calls), {f"/person/{person_id}/combined_credits" for person_id in range(1, 4)})
+
+    def test_person_credits_never_bypass_streaming_availability(self):
+        app.dependency_overrides[preference_store] = lambda: FakePreferences([], ["Netflix"])
+        app.dependency_overrides[library_store] = lambda: FakeLibrary([])
+
+        def results(path, params=None):
+            if path.startswith("/person/"):
+                return {"cast": discover_result([1, 2], "movie")["results"]}
+            self.assertEqual(params["with_watch_providers"], "8")
+            return discover_result([2], "movie") if path.endswith("/movie") else {"results": []}
+
+        with (patch("app.recommendations.favorite_signals", return_value=([], [{"id": 1, "name": "Favorite person"}])),
+              patch("app.recommendations.tmdb_get", side_effect=results)):
+            body = self.client.get("/api/me/recommendations?streaming_only=true", headers=self.headers()).json()
+        self.assertEqual([(item["id"], item["reason"]) for item in body["items"]], [(2, "Favorite person")])
+
+    def test_people_lookup_failure_falls_back_to_popular(self):
+        def results(path):
+            if path.startswith("/person/"):
+                raise APIError(503, "catalog_unavailable", "busy")
+            return discover_result([3], "movie")
+
+        with patch("app.recommendations.favorite_signals", return_value=([], [{"id": 1, "name": "Favorite person"}])):
+            body = self.run_with([], [], results).json()
+        self.assertEqual(body["basis"], "popular")
+        self.assertEqual([item["id"] for item in body["items"]], [3])
+
     def test_limit_and_auth(self):
         results = lambda path: discover_result(list(range(1, 21)), "movie")
         body = self.run_with(["Comedy"], [], results).json()

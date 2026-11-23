@@ -183,6 +183,25 @@ def search_available(query: str = Query(min_length=1, max_length=200), page: int
             "availability_region": "US", "filtered_by_services": True}
 
 
+@router.get("/people/search")
+def search_people(query: str = Query(min_length=1, max_length=200),
+                  page: int = Query(default=1, ge=1, le=500)) -> dict:
+    query = query.strip()
+    if not query:
+        raise APIError(422, "invalid_query", "Enter a name to search.")
+    data = tmdb_get("/search/person", {"query": query, "page": page, "include_adult": "false"})
+    fields = ("id", "name", "profile_path", "known_for_department")
+    items = []
+    for person in data.get("results", []):
+        if not isinstance(person, dict) or not person.get("id") or not person.get("name") or person.get("adult"):
+            continue
+        titles = [title.get("title") or title.get("name") for title in person.get("known_for") or []
+                  if isinstance(title, dict) and not title.get("adult")]
+        items.append({**{field: person.get(field) for field in fields},
+                      "known_for": list(dict.fromkeys(title for title in titles if title))[:2]})
+    return {"items": items, "page": data.get("page", page), "total_pages": data.get("total_pages", 0)}
+
+
 @router.get("/people/{person_id}")
 def person_details(person_id: int) -> dict:
     if not 0 < person_id <= 2147483647:

@@ -1,6 +1,7 @@
 """Private TMDB person favorites."""
 
 import logging
+from contextlib import contextmanager
 from typing import Annotated
 
 import psycopg
@@ -21,16 +22,30 @@ User = Annotated[AuthenticatedUser, Depends(current_user)]
 Config = Annotated[Settings, Depends(get_settings)]
 
 
-def query(settings: Settings, user: User, sql: str, values: tuple = ()) -> list[dict]:
+@contextmanager
+def favorite_connection(settings: Settings, user: AuthenticatedUser):
     if not settings.database_url:
         raise APIError(503, "favorites_unavailable", "Favorites are unavailable right now.")
     try:
         with user_connection(settings.database_url, user.id, row_factory=dict_row) as conn:
-            cursor = conn.execute(sql, (user.id, *values))
-            return cursor.fetchall() if cursor.description else []
+            yield conn
     except psycopg.Error as exc:
         logger.exception("Favorite people query failed")
         raise APIError(503, "favorites_unavailable", "Favorites are unavailable right now.") from exc
+
+
+def query(settings: Settings, user: AuthenticatedUser, sql: str, values: tuple = ()) -> list[dict]:
+    with favorite_connection(settings, user) as conn:
+        cursor = conn.execute(sql, (user.id, *values))
+        return cursor.fetchall() if cursor.description else []
+
+
+def insert_person(conn, user_id: str, person: dict) -> None:
+    conn.execute(
+        """insert into public.favorite_people (user_id, tmdb_person_id, name, profile_path)
+           values (%s, %s, %s, %s) on conflict (user_id, tmdb_person_id) do nothing""",
+        (user_id, person["id"], person["name"], person["profile_path"]),
+    )
 
 
 @router.get("")
@@ -53,10 +68,8 @@ def favorite_status(person_id: PersonId, user: User, settings: Config) -> dict:
 def save_person(person_id: PersonId, user: User, settings: Config) -> dict:
     if not favorite_status(person_id, user, settings)["favorited"]:
         person = person_details(person_id)
-        query(settings, user, """
-            insert into public.favorite_people (user_id, tmdb_person_id, name, profile_path)
-            values (%s, %s, %s, %s) on conflict (user_id, tmdb_person_id) do nothing
-        """, (person_id, person["name"], person["profile_path"]))
+        with favorite_connection(settings, user) as conn:
+            insert_person(conn, user.id, person)
     return {"favorited": True}
 
 

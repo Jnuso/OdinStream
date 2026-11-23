@@ -236,7 +236,7 @@ export default function Discover({
         <section className="recommendations" aria-label="Recommended titles">
           <div className="section-heading">
             <h2>For you</h2>
-            {recommendedBasis !== "genres" && <p className="muted small">Popular picks</p>}
+            {recommendedBasis === "popular" && <p className="muted small">Popular picks</p>}
           </div>
           {recommendedError ? (
             <p className="muted">{recommendedError}</p>

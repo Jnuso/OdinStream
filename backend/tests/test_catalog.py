@@ -50,6 +50,21 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual([item["id"] for item in response.json()["items"]], list(range(10, 16)))
         self.assertEqual(response.json()["items"][0]["backdrop_path"], "/wide.jpg")
 
+    def test_people_search_includes_credits_to_distinguish_names(self):
+        results = {"page": 2, "total_pages": 3, "results": [
+            {"id": 11, "name": "Alex", "known_for_department": "Directing",
+             "known_for": [{"title": "Film"}, {"name": "Series"}, {"title": "Adult", "adult": True}]},
+            {"id": 12, "name": "Adult person", "adult": True},
+        ]}
+        with patch("app.catalog.tmdb_get", return_value=results) as fetch:
+            response = self.client.get("/api/catalog/people/search", params={"query": " Alex ", "page": 2})
+        fetch.assert_called_once_with("/search/person", {"query": "Alex", "page": 2, "include_adult": "false"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"page": 2, "total_pages": 3, "items": [
+            {"id": 11, "name": "Alex", "profile_path": None, "known_for_department": "Directing",
+             "known_for": ["Film", "Series"]},
+        ]})
+
     def test_search_type_uses_the_matching_tmdb_endpoint(self):
         results = {"results": [{"id": 1, "name": "A show"}], "page": 2, "total_pages": 3}
         with patch("app.catalog.tmdb_get", return_value=results) as fetch:

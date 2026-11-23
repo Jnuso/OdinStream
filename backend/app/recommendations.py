@@ -1,14 +1,4 @@
-"""Explainable recommendations from favorite genres and library history.
-
-Ranking is deliberately simple: every candidate title scores once for each of
-the viewer's favorite genres that produced it, with TMDB popularity as the
-tie-break. Titles already watched (movies) or completed/dropped (shows) are
-excluded. A viewer without favorite genres gets popular titles instead.
-
-TMDB work is bounded: at most ``MAX_TMDB_CALLS`` discover pages are fetched per
-request (deduplicated by media type and genre id) and they run concurrently in a
-small thread pool, so a page load cannot turn into a long sequential crawl.
-"""
+"""Rank recommendations using genres, favorite titles and favorite people."""
 
 from __future__ import annotations
 
@@ -22,13 +12,17 @@ from app.accounts import current_user, preference_store
 from app.auth import AuthenticatedUser
 from app.catalog import SERVICE_IDS, summarize, tmdb_get
 from app.errors import APIError
+from app.favorite_people import Config, favorite_connection
 from app.library import PostgresLibraryStore, library_store
 from app.preferences import PostgresPreferenceStore
+from app.settings import Settings
 
 router = APIRouter(prefix="/api/me", tags=["recommendations"])
 
 MAX_TMDB_CALLS = 6
 MAX_WORKERS = MAX_TMDB_CALLS
+MAX_PEOPLE_LOOKUPS = 3
+MAX_INFERRED_PAGES = 3
 
 GENRE_IDS: dict[str, dict[str, int]] = {
     "movie": {
@@ -62,7 +56,7 @@ def genre_requests(genres: list[str]) -> list[tuple[str, str, int]]:
     return requests[:MAX_TMDB_CALLS]
 
 
-def fetch_discover_page(request: tuple[str, str, int | None], providers: str) -> tuple[str, str, dict] | None:
+def fetch_discover_page(request: tuple[str, str, int | None], providers: str) -> tuple[str, str, int | None, dict] | None:
     """Fetch one discover page; a failed page is skipped rather than fatal."""
     media_type, genre, genre_id = request
     params: dict[str, str | int] = {"sort_by": "popularity.desc", "vote_count.gte": 50, "include_adult": "false"}
@@ -74,10 +68,10 @@ def fetch_discover_page(request: tuple[str, str, int | None], providers: str) ->
         data = tmdb_get(f"/discover/{media_type}", params)
     except APIError:
         return None
-    return media_type, genre, data if isinstance(data, dict) else {}
+    return media_type, genre, genre_id, data if isinstance(data, dict) else {}
 
 
-def fetch_discover_pages(requests: Sequence[tuple[str, str, int | None]], providers: str) -> list[tuple[str, str, dict]]:
+def fetch_discover_pages(requests: Sequence[tuple[str, str, int | None]], providers: str) -> list[tuple[str, str, int | None, dict]]:
     if not requests:
         return []
     with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(requests))) as pool:
@@ -85,8 +79,50 @@ def fetch_discover_pages(requests: Sequence[tuple[str, str, int | None]], provid
     return [page for page in pages if page is not None]
 
 
+def favorite_signals(user: AuthenticatedUser, settings: Settings) -> tuple[list[dict], list[dict]]:
+    if not settings.database_url:
+        return [], []
+    try:
+        with favorite_connection(settings, user) as conn:
+            titles = conn.execute("""
+                select media_type, tmdb_id, name, genre_ids from public.favorite_titles
+                where user_id = %s order by created_at desc, media_type, tmdb_id
+            """, (user.id,)).fetchall()
+            people = conn.execute("""
+                select tmdb_person_id as id, name from public.favorite_people
+                where user_id = %s order by created_at desc, tmdb_person_id desc limit %s
+            """, (user.id, MAX_PEOPLE_LOOKUPS)).fetchall()
+    except APIError:
+        return [], []
+    return titles, people
+
+
+def title_genres(titles: list[dict]) -> dict[tuple[str, int], list[str]]:
+    seeds: dict[tuple[str, int], list[str]] = {}
+    for title in titles:
+        for genre_id in title["genre_ids"]:
+            seeds.setdefault((title["media_type"], genre_id), []).append(title["name"])
+    return seeds
+
+
+def person_candidates(person: dict) -> tuple[str, dict[tuple[str, int], dict]]:
+    try:
+        credits = tmdb_get(f"/person/{person['id']}/combined_credits")
+    except APIError:
+        return person["name"], {}
+    acting = credits.get("cast") or []
+    directing = [credit for credit in credits.get("crew") or [] if credit.get("job") == "Director"]
+    items = {}
+    for item in [*acting, *directing]:
+        media_type = item.get("media_type")
+        if media_type in ("movie", "tv") and item.get("id") and not item.get("adult"):
+            if summarize(item, media_type)["name"]:
+                items.setdefault((media_type, item["id"]), item)
+    return person["name"], items
+
+
 @router.get("/recommendations")
-def read_recommendations(limit: int = Query(default=12, ge=1, le=20),
+def read_recommendations(settings: Config, limit: int = Query(default=12, ge=1, le=20),
                          streaming_only: bool = False,
                          user: AuthenticatedUser = Depends(current_user),
                          preferences: PostgresPreferenceStore = Depends(preference_store),
@@ -100,32 +136,70 @@ def read_recommendations(limit: int = Query(default=12, ge=1, le=20),
             raise APIError(422, "no_streaming_services", "Choose streaming services in Account before filtering.")
         providers = "|".join(map(str, sorted(provider_ids)))
     excluded = excluded_titles(library.list(user.id, None, None))
+    favorite_titles, favorite_people = favorite_signals(user, settings)
+    excluded.update((title["media_type"], title["tmdb_id"]) for title in favorite_titles)
+    inferred_genres = title_genres(favorite_titles)
 
     scores: dict[tuple[str, int], int] = {}
     candidates: dict[tuple[str, int], dict] = {}
     reasons: dict[tuple[str, int], str] = {}
+    candidate_genres: dict[tuple[str, int], set[int]] = {}
+    favorite_reasons: dict[tuple[str, int], str] = {}
 
-    if genres or providers:
-        requests: Sequence[tuple[str, str, int | None]] = genre_requests(genres) if genres else [
-            ("movie", "", None), ("tv", "", None),
-        ]
+    if genres or providers or inferred_genres:
+        manual = genre_requests(genres)
+        manual_keys = {(media_type, genre_id) for media_type, _, genre_id in manual}
+        inferred = [(media_type, "", genre_id)
+                    for media_type, genre_id in sorted(inferred_genres, key=lambda key: -len(inferred_genres[key]))
+                    if (media_type, genre_id) not in manual_keys][:MAX_INFERRED_PAGES]
+        requests: list[tuple[str, str, int | None]] = [*manual[:MAX_TMDB_CALLS - len(inferred)], *inferred]
+        if providers and not genres:
+            requests.extend([("movie", "", None), ("tv", "", None)])
         pages = fetch_discover_pages(requests, providers)
-        if not pages:
+        if not pages and (providers or (genres and not favorite_people)):
             raise APIError(503, "recommendations_unavailable",
                            "Recommendations are unavailable right now. Try again.")
-        for media_type, genre, data in pages:
+        for media_type, genre, genre_id, data in pages:
             for item in data.get("results", []):
                 if not isinstance(item, dict) or item.get("id") is None:
                     continue
                 key = (media_type, int(item["id"]))
                 if key in excluded:
                     continue
-                scores[key] = scores.get(key, 0) + 1
+                scores[key] = scores.get(key, 0) + int(bool(genre))
                 candidates.setdefault(key, item)
+                ids = candidate_genres.setdefault(key, set())
+                ids.update(item.get("genre_ids") or [])
+                if genre_id is not None:
+                    ids.add(genre_id)
                 if genre:
                     reasons.setdefault(key, genre)
         basis = "genres" if genres else "popular"
     else:
+        basis = "popular"
+
+    if favorite_people:
+        with ThreadPoolExecutor(max_workers=MAX_PEOPLE_LOOKUPS) as pool:
+            for name, matches in pool.map(person_candidates, favorite_people[:MAX_PEOPLE_LOOKUPS]):
+                for key, item in matches.items():
+                    if key in excluded or (providers and key not in candidates):
+                        continue
+                    scores[key] = scores.get(key, 0) + 1
+                    candidates.setdefault(key, item)
+                    candidate_genres.setdefault(key, set()).update(item.get("genre_ids") or [])
+                    favorite_reasons.setdefault(key, name)
+
+    for key, ids in candidate_genres.items():
+        for genre_id in sorted(ids):
+            matches = inferred_genres.get((key[0], genre_id))
+            if matches:
+                scores[key] += len(matches)
+                favorite_reasons.setdefault(key, matches[0])
+
+    if favorite_reasons:
+        basis = "favorites"
+        reasons.update(favorite_reasons)
+    if not candidates and not providers and (not genres or favorite_people):
         data = tmdb_get("/trending/all/week")
         for item in data.get("results", []):
             if not isinstance(item, dict) or item.get("media_type") not in ("movie", "tv"):
