@@ -76,7 +76,25 @@
   margin: 0 0 16px;
   list-style: none;
 }
-.title-cast-list li { display: grid; align-content: start; gap: 4px; font-size: 13px; overflow-wrap: anywhere; }
+.title-cast-list li { min-width: 0; }
+.title-cast-card {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.title-cast-card:hover, .title-cast-card:focus-visible { background: var(--surface); }
+.actor-credits h3 { margin: 12px 0 16px; }
+.actor-credits .poster-w185 { width: 100%; aspect-ratio: 2 / 3; height: auto; }
 .title-cast-photo {
   position: relative;
   display: grid;

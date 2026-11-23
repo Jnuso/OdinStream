@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Session } from "@supabase/supabase-js";
 import App from "../src/App";
+import TitleDetails from "../src/components/TitleDetails";
 import { clearCatalogCache } from "../src/data/catalogCache";
 
 const auth = vi.hoisted(() => ({ changed: null as ((event: string, session: Session | null) => void) | null }));
@@ -20,6 +21,25 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
 });
 afterEach(() => { cleanup(); clearCatalogCache(); vi.unstubAllGlobals(); auth.changed = null; window.history.replaceState(null, "", "/"); });
+
+it("opens an actor's other credits and navigates to a credited title", async () => {
+  const actor = { id: 7, name: "Adam Scott", profile_path: null, characters: ["Mark Scout"] };
+  const movie = { ...title, media_type: "movie", name: "A movie", characters: ["Alex"] };
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => (
+    String(input).endsWith("/people/7/credits")
+      ? Response.json({ items: [{ ...title, characters: actor.characters }, movie] })
+      : Response.json({ ...title, cast: [actor] })
+  )));
+  const openTitle = vi.fn();
+  render(<TitleDetails selection={{ media_type: "tv", id: title.id }} token={null}
+    onClose={vi.fn()} onOpenTitle={openTitle} />);
+  fireEvent.click(await screen.findByRole("button", { name: /Adam Scott/ }));
+  await screen.findByRole("dialog", { name: "Adam Scott acting credits" });
+  expect(screen.queryByRole("button", { name: /^Severance/ })).toBeNull();
+  fireEvent.click(await screen.findByRole("button", { name: /A movie.*2022.*Alex/ }));
+  expect(openTitle).toHaveBeenCalledWith("movie", title.id);
+  expect(screen.queryByRole("dialog", { name: "Adam Scott acting credits" })).toBeNull();
+});
 
 it("waits for Discover and lets Feed join its in-flight preload", async () => {
   let resolveTrending!: (response: Response) => void;

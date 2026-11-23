@@ -156,6 +156,18 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["episodes"][0]["name"], "Pilot")
 
+    def test_person_credits_include_only_distinct_cast_titles(self):
+        movie = {"id": 1, "media_type": "movie", "title": "Movie", "release_date": "2022-01-01"}
+        show = {"id": 1, "media_type": "tv", "name": "Show", "first_air_date": "2024-01-01"}
+        data = {"cast": [{**movie, "character": "Lead"}, show, {**movie, "character": "Double"},
+                         {**movie, "id": 2, "adult": True}], "crew": [{**movie, "id": 3}]}
+        with patch("app.catalog.tmdb_get", return_value=data) as fetch:
+            response = self.client.get("/api/catalog/people/7/credits")
+        fetch.assert_called_once_with("/person/7/combined_credits")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([(item["name"], item["characters"]) for item in response.json()["items"]],
+                         [("Show", []), ("Movie", ["Lead", "Double"])])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,6 +3,7 @@ import Modal from "./Modal";
 import Poster from "./Poster";
 import PostCard from "./PostCard";
 import Skeleton from "./Skeleton";
+import ActorCredits from "./ActorCredits";
 import { api } from "../data/api";
 import { formatYear, initials, type MediaType, type Post, type TitleSummary } from "../data/social";
 
@@ -46,6 +47,7 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
   const [libraryCheck, setLibraryCheck] = useState<LibraryCheck | null>(null);
   const [libraryRetry, setLibraryRetry] = useState(0);
   const [visibleCastCount, setVisibleCastCount] = useState(CAST_PAGE_SIZE);
+  const [selectedActor, setSelectedActor] = useState<{ id: number; name: string } | null>(null);
   const cast = detail?.cast ?? [];
   const detailRequest = useRef(0);
   const seasonRequest = useRef(0);
@@ -126,7 +128,7 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
     return () => { active = false; };
   }, [detail, token, libraryRetry]);
 
-  return <Modal className="title-dialog" label={detail ? `${detail.name} details` : "Title details"} onClose={onClose}>
+  return <><Modal className="title-dialog" label={detail ? `${detail.name} details` : "Title details"} onClose={onClose}>
     {detailError ? <><h2>Couldn’t load this title</h2><p className="form-error" role="alert">{detailError}</p><button className="secondary" onClick={() => { setDetailError(""); setDetailRetry(value => value + 1); }}>Try again</button></>
       : !detail ? <Skeleton label="Loading title details…" variant="rows" count={1} />
       : <>
@@ -233,15 +235,17 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
                 <ul className="title-cast-list">
                   {cast.slice(0, visibleCastCount).map(actor => (
                     <li key={actor.id}>
-                      <div className="title-cast-photo" aria-hidden="true">
-                        {initials(actor.name)}
-                        {actor.profile_path && (
-                          <img src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`} alt="" loading="lazy"
-                            onError={event => { event.currentTarget.hidden = true; }} />
-                        )}
-                      </div>
-                      <strong>{actor.name}</strong>
-                      {actor.characters.length > 0 && <span className="muted">{actor.characters.join(", ")}</span>}
+                      <button className="title-cast-card" onClick={() => setSelectedActor(actor)}>
+                        <div className="title-cast-photo" aria-hidden="true">
+                          {initials(actor.name)}
+                          {actor.profile_path && (
+                            <img src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`} alt="" loading="lazy"
+                              onError={event => { event.currentTarget.hidden = true; }} />
+                          )}
+                        </div>
+                        <strong>{actor.name}</strong>
+                        {actor.characters.length > 0 && <span className="muted">{actor.characters.join(", ")}</span>}
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -254,5 +258,10 @@ export default function TitleDetails({ selection, token, viewerId, reloadKey = 0
             </section>
           )}
       </>}
-  </Modal>;
+  </Modal>
+    {selectedActor && (
+      <ActorCredits key={selectedActor.id} actor={selectedActor} currentTitle={selection}
+        onClose={() => setSelectedActor(null)} onOpenTitle={onOpenTitle} />
+    )}
+  </>;
 }

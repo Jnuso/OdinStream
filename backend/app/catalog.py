@@ -183,6 +183,27 @@ def search_available(query: str = Query(min_length=1, max_length=200), page: int
             "availability_region": "US", "filtered_by_services": True}
 
 
+@router.get("/people/{person_id}/credits")
+def person_credits(person_id: int) -> dict:
+    if person_id <= 0:
+        raise APIError(422, "invalid_person", "Person IDs must be positive.")
+    data = tmdb_get(f"/person/{person_id}/combined_credits")
+    titles = {}
+    for credit in data.get("cast") or []:
+        media_type = credit.get("media_type")
+        if media_type not in ("movie", "tv") or credit.get("id") is None or credit.get("adult"):
+            continue
+        title = summarize(credit, media_type)
+        if not title["name"]:
+            continue
+        key = (media_type, title["id"])
+        entry = titles.setdefault(key, {**title, "characters": []})
+        character = credit.get("character")
+        if character and character not in entry["characters"]:
+            entry["characters"].append(character)
+    return {"items": sorted(titles.values(), key=lambda title: title["release_date"] or "", reverse=True)}
+
+
 @router.get("/{media_type}/{tmdb_id}")
 def title_details(media_type: MediaType, tmdb_id: int) -> dict:
     if tmdb_id <= 0:
