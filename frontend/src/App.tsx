@@ -26,6 +26,7 @@ import TitleDetails from "./components/TitleDetails";
 import NavIcon from "./components/NavIcon";
 import "./App.css";
 import "./SiteRefinements.css";
+import "./DesktopPrototype.css";
 import FollowRequests, { RequestBadge } from "./components/FollowRequests";
 import { useFollowRequests } from "./data/useFollowRequests";
 
@@ -182,6 +183,7 @@ export default function App() {
           }}
         >
           <span className="brand-mark" aria-hidden="true">
+            <span className="desktop-brand-letter">O</span>
             <svg viewBox="0 0 24 24" width="22" height="22" focusable="false">
               <path
                 d="M6 18 18 6M6 6h12v12"
@@ -193,7 +195,7 @@ export default function App() {
               />
             </svg>
           </span>
-          Odin<span>Stream</span>
+          <span>Odin Stream</span>
         </a>
         <div className="nav-label">Navigation</div>
         <nav aria-label="Main navigation">
@@ -229,6 +231,7 @@ export default function App() {
           </span>
           <div>
             <span className="country">United States</span>
+            {page === "feed" && <button className="primary desktop-feed-compose" onClick={startComposer}>+ New post</button>}
             {token && <button className="mobile-account-shortcut" aria-label="Open account settings" onClick={() => setPage("account")}><NavIcon name="account" /></button>}
             <button className="account-shortcut" aria-label={token ? "View your profile" : "Sign in"} onClick={() => token ? openProfile("me") : setPage("account")}>
               {me ? <span className={`avatar ${avatarColor(me.id)}`}>{initials(me.display_name)}</span> : "Sign in"}
@@ -238,7 +241,7 @@ export default function App() {
         </header>
         <main id="main" tabIndex={-1}>
           {page === "discover" ? (
-            <Discover token={token} onOpenTitle={openTitle} />
+            <Discover token={token} onOpenTitle={openTitle} onOpenAccount={() => setPage("account")} />
           ) : page === "library" ? (
             <Library key={viewerId || "signed-out"} token={token} onOpenTitle={openTitle} />
           ) : page === "account" ? (

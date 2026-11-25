@@ -35,6 +35,19 @@ it("filters loaded titles and groups completed shows with watched movies", async
   expect(screen.getByText("Dune")).toBeTruthy();
 });
 
+it("loads completed show progress only after expanding its checklist", async () => {
+  const fetchMock = fixture();
+  render(<Library token="token" />);
+  await screen.findByText("Severance");
+  const progressRequests = () => fetchMock.mock.calls.filter(([input]) =>
+    String(input).endsWith("/api/me/saved-titles/second/episodes"),
+  );
+  expect(progressRequests()).toHaveLength(0);
+  fireEvent.click(screen.getByRole("button", { name: "Episode progress" }));
+  await screen.findByText(/0 episodes marked watched/);
+  expect(progressRequests()).toHaveLength(1);
+});
+
 it("requires confirmation before removing a saved title", async () => {
   const fetchMock = fixture(); render(<Library token="token" />);
   await screen.findByText("Dune");

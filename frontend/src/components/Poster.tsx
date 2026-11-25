@@ -19,9 +19,10 @@ export default function Poster({
       />
     );
   }
+  const label = initials(name);
   return (
-    <div className={`poster-fallback poster-${size}`} aria-hidden="true">
-      <span>{initials(name)}</span>
+    <div className={`poster-fallback poster-${size}`} aria-hidden="true" data-initial={label.slice(0, 1)}>
+      <span>{label}</span>
     </div>
   );
 }
